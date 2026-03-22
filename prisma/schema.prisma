@@ -1,13 +1,50 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+model SystemConfig {
+  id              String   @id @default("singleton")
+  appId           String
+  clientId        String
+  clientSecret    String
+  webhookSecret   String
+  privateKey      String
+  isSetupComplete Boolean  @default(true)
+}
+
+model User {
+  id              String   @id @default(cuid())
+  name            String?
+  email           String?  @unique
+  image           String?
+  installationId  String?
+  shares          Share[]
+}
+
+model Share {
+  id            String    @id @default(uuid())
+  repoFullName  String
+  createdAt     DateTime  @default(now())
+  expiresAt     DateTime?
+  passwordHash  String?
+  active        Boolean   @default(true)
+  allowGitClone Boolean   @default(true)
+  
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  analytics     AnalyticEvent[]
+}
+
+model AnalyticEvent {
+  id        String   @id @default(cuid())
+  shareId   String
+  share     Share    @relation(fields: [shareId], references: [id], onDelete: Cascade)
+  type      String   // PAGE_VIEW, WEB_DOWNLOAD, GIT_CLONE
+  ipHash    String
+  createdAt DateTime @default(now())
 }
