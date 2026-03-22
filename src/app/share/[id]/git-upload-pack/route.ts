@@ -14,7 +14,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return new NextResponse("Repository not found or link expired", { status: 404 })
   }
 
-  if (!share.installationId) {
+  if (!(share as any).installationId) {
     return new NextResponse("Server configuration error", { status: 500 })
   }
 
@@ -22,8 +22,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     data: { shareId: share.id, type: "GIT_CLONE_UPLOAD", ipHash: "anonymized_via_edge" }
   }).catch(() => {})
 
-  const token = await getInstallationToken(share.installationId)
+  const token = await getInstallationToken((share as any).installationId)
   const gitUrl = `https://github.com/${share.repoFullName}.git/git-upload-pack`
+
+  const bodyBuffer = Buffer.from(await req.arrayBuffer())
 
   // Forward the binary payload pack request from the Git client directly to GitHub
   const gitResponse = await fetch(gitUrl, {
@@ -34,9 +36,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       "Accept": req.headers.get("accept") || "application/x-git-upload-pack-result",
       "User-Agent": "RepoShare Proxy",
     },
-    body: req.body, // Standard streaming forwarding
-    // @ts-ignore - Required for native Node fetch body streaming 
-    duplex: "half"
+    body: bodyBuffer,
   })
 
   return new NextResponse(gitResponse.body, {

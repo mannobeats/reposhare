@@ -21,7 +21,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   // Auth checking for password protections can be implemented via Git Basic Auth headers here if needed.
 
-  if (!share.installationId) {
+  if (!(share as any).installationId) {
     return new NextResponse("Server configuration error", { status: 500 })
   }
 
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
   }).catch(() => {})
 
-  const token = await getInstallationToken(share.installationId)
+  const token = await getInstallationToken((share as any).installationId)
   const gitUrl = `https://github.com/${share.repoFullName}.git/info/refs?service=${service}`
 
   // Proxy the request securely to GitHub

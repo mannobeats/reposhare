@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     url: baseUrl,
     redirect_url: `${baseUrl}/api/github/setup`,
     callback_urls: [`${baseUrl}/api/auth/callback/github`],
-    public: false,
+    public: true, // MUST be true for users to install it on isolated unlinked accounts/orgs
     default_permissions: {
       contents: "read",
       metadata: "read",

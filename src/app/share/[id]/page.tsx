@@ -17,7 +17,14 @@ export default async function SharedRepositoryPage({ params }: { params: Promise
   })
 
   if (!share || (share.expiresAt && share.expiresAt < new Date())) {
-    notFound()
+    return (
+      <div className="flex items-center justify-center min-h-screen text-primary p-6">
+        <div className="border border-red-500 bg-red-500/10 p-6 max-w-lg w-full">
+           <span className="text-red-500 font-bold uppercase tracking-widest text-sm mb-2 block">&gt; FATAL ERROR: 404</span>
+           <span className="text-red-500/70 text-xs uppercase tracking-widest block">The requested repository matrix could not be resolved. It may have expired or been purged.</span>
+        </div>
+      </div>
+    )
   }
 
   // Increment view counter analytics
@@ -25,7 +32,18 @@ export default async function SharedRepositoryPage({ params }: { params: Promise
     data: { shareId: share.id, type: "PAGE_VIEW", ipHash: "anonymized_via_edge" }
   }).catch(() => {})
 
-  const octokit = await getOctokitForInstallation(share.user.installationId!)
+  if (!(share as any).installationId) {
+    return (
+      <div className="flex items-center justify-center min-h-screen text-primary p-6">
+        <div className="border border-red-500 bg-red-500/10 p-6 max-w-lg w-full">
+           <span className="text-red-500 font-bold uppercase tracking-widest text-sm mb-2 block">&gt; SYSTEM ERROR: 500</span>
+           <span className="text-red-500/70 text-xs uppercase tracking-widest block">Origin node installation invalid or falsy. Please regenerate the proxy tunnel.</span>
+        </div>
+      </div>
+    )
+  }
+
+  const octokit = await getOctokitForInstallation((share as any).installationId)
   const [owner, repo] = share.repoFullName.split("/")
   
   let readme = ""
@@ -48,71 +66,75 @@ export default async function SharedRepositoryPage({ params }: { params: Promise
   const cloneCmd = `git clone ${process.env.NEXT_PUBLIC_SITE_URL || "https://reposhare.domain"}/share/${cleanId}.git`
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white selection:bg-neutral-800 pb-20 font-sans">
-      <div className="absolute top-0 left-0 w-full h-[500px] bg-gradient-to-b from-neutral-900/50 to-transparent pointer-events-none" />
-
-      <main className="max-w-4xl mx-auto px-6 pt-24 relative z-10">
+    <div className="min-h-screen flex flex-col p-6 screen-scanline font-mono text-primary">
+      <main className="max-w-5xl mx-auto w-full pt-16 relative z-10">
         <header className="space-y-6 mb-12">
           <div className="flex items-center space-x-4 mb-8">
-            <div className="w-12 h-12 bg-white rounded-xl text-black flex items-center justify-center shadow-2xl">
+            <div className="w-12 h-12 border border-primary bg-primary flex items-center justify-center text-background">
               <FolderGit2 className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-3xl font-semibold tracking-tight">{repo}</h1>
-              <p className="text-neutral-500 font-mono text-sm tracking-tight">{owner}/{repo}</p>
+              <h1 className="text-3xl font-bold tracking-widest uppercase">{repo}</h1>
+              <p className="text-primary/50 text-xs tracking-widest uppercase">{owner}/{repo}</p>
             </div>
           </div>
           
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex bg-neutral-900/50 backdrop-blur-md rounded-2xl p-1 border border-white/10 w-full sm:w-auto overflow-hidden shadow-2xl">
-               <div className="bg-black text-neutral-400 font-mono text-sm px-4 py-3 rounded-xl flex items-center w-full select-all">
-                  <Terminal className="w-4 h-4 mr-3 text-neutral-600" />
-                  <span className="opacity-70 mr-2">$</span> {cloneCmd}
+          <div className="flex flex-col md:flex-row items-center gap-4">
+            <div className="flex bg-background border border-primary w-full md:w-auto overflow-hidden">
+               <div className="text-primary text-xs px-4 py-3 flex items-center w-full select-all">
+                  <Terminal className="w-4 h-4 mr-3 opacity-50" />
+                  <span className="opacity-50 mr-2">&gt;</span> {cloneCmd}
                </div>
             </div>
             
-            <a href={`/api/download/${cleanId}`} download>
-             <Button className="h-[52px] px-8 rounded-2xl bg-white text-black hover:bg-neutral-200 transition-transform active:scale-95 shadow-xl font-medium">
-               <Download className="w-5 h-5 mr-2" /> Download Source ZIP
+            <a href={`/api/download/${cleanId}`} download className="w-full md:w-auto">
+             <Button className="w-full h-[42px] px-8 rounded-none border border-primary bg-primary text-background hover:bg-transparent hover:text-primary transition-colors text-xs uppercase tracking-widest font-bold scanline-button">
+               <Download className="w-4 h-4 mr-2" /> Download Source
              </Button>
             </a>
           </div>
+           
+          {(!repoData && !readme) && (
+            <div className="border border-red-500 bg-red-500/10 p-4 mt-6">
+               <span className="text-red-500 text-xs uppercase tracking-widest block">&gt; WARNING: Partial resolution failure. GitHub API returned empty payloads. Rate limits or deletion detected.</span>
+            </div>
+          )}
         </header>
 
         {repoData && (
-           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12 text-sm text-neutral-400">
-             <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col items-center justify-center space-y-2">
-               <Calendar className="w-5 h-5 text-neutral-500" />
-               <span className="font-medium text-white">{format(new Date(repoData.pushed_at), "MMM d, yyyy")}</span>
-               <span className="text-xs">Last Updated</span>
+           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12 text-xs uppercase tracking-widest">
+             <div className="border border-primary/40 bg-background p-4 flex flex-col items-center justify-center space-y-2">
+               <Calendar className="w-4 h-4 text-primary/60" />
+               <span className="font-bold">{format(new Date(repoData.pushed_at), "MMM d, yyyy")}</span>
+               <span className="text-[10px] text-primary/50">Last Push</span>
              </div>
-             <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col items-center justify-center space-y-2">
-               <FileText className="w-5 h-5 text-neutral-500" />
-               <span className="font-medium text-white">{(repoData.size / 1024).toFixed(1)} MB</span>
-               <span className="text-xs">Repository Size</span>
+             <div className="border border-primary/40 bg-background p-4 flex flex-col items-center justify-center space-y-2">
+               <FileText className="w-4 h-4 text-primary/60" />
+               <span className="font-bold">{(repoData.size / 1024).toFixed(1)} MB</span>
+               <span className="text-[10px] text-primary/50">Data Size</span>
              </div>
-             <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col items-center justify-center space-y-2">
-               <Github className="w-5 h-5 text-neutral-500" />
-               <span className="font-medium text-white">{repoData.default_branch}</span>
-               <span className="text-xs">Default Branch</span>
+             <div className="border border-primary/40 bg-background p-4 flex flex-col items-center justify-center space-y-2">
+               <Github className="w-4 h-4 text-primary/60" />
+               <span className="font-bold">{repoData.default_branch}</span>
+               <span className="text-[10px] text-primary/50">Root Branch</span>
              </div>
-             <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col items-center justify-center space-y-2">
-               <AlignLeft className="w-5 h-5 text-neutral-500" />
-               <span className="font-medium text-white">{readme ? "Available" : "Missing"}</span>
-               <span className="text-xs">README.md</span>
+             <div className="border border-primary/40 bg-background p-4 flex flex-col items-center justify-center space-y-2">
+               <AlignLeft className="w-4 h-4 text-primary/60" />
+               <span className="font-bold">{readme ? "OK" : "ERR"}</span>
+               <span className="text-[10px] text-primary/50">Readme Chunk</span>
              </div>
            </div>
         )}
 
         {readme ? (
-          <article className="prose prose-invert prose-neutral max-w-none prose-pre:bg-neutral-900/80 prose-pre:border-white/10 prose-pre:border prose-a:text-blue-400 hover:prose-a:text-blue-300 bg-neutral-950/40 p-10 rounded-3xl border border-white/10 shadow-2xl backdrop-blur-xl">
+          <article className="prose prose-invert prose-p:text-primary prose-a:text-primary prose-strong:text-primary max-w-none bg-background p-8 border border-primary/40 text-sm font-sans tracking-wide">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>
               {readme}
             </ReactMarkdown>
           </article>
         ) : (
-          <div className="text-center p-20 bg-neutral-900/20 border border-white/10 rounded-3xl">
-            <p className="text-neutral-500">No README.md available for this repository.</p>
+          <div className="text-center p-12 bg-background border border-primary/40 border-dashed">
+            <p className="text-primary/50 text-xs uppercase tracking-widest">&gt; NO DOCUMENTATION DATASTREAM FOUND</p>
           </div>
         )}
       </main>

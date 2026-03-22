@@ -24,6 +24,13 @@ export default function ClientDashboard({ userId, isAppConfigured, installations
   const [activeTab, setActiveTab] = useState<"connections" | "shares" | "analytics" | "system">("connections")
   const [searchQuery, setSearchQuery] = useState("")
 
+  const [modalState, setModalState] = useState<{ isOpen: boolean, actionFn: (() => Promise<void>) | null, warningText: string, successMessage: string }>({
+    isOpen: false,
+    actionFn: null,
+    warningText: "",
+    successMessage: "",
+  })
+
   const chartData = useMemo(() => {
     const buckets: Record<string, number> = {}
     analyticsData.forEach(event => {
@@ -60,28 +67,61 @@ export default function ClientDashboard({ userId, isAppConfigured, installations
   }
 
   const tabs = [
-    { id: "connections", label: "NODE_NETWORKS", icon: Database },
-    { id: "shares", label: "ACTIVE_PROXIES", icon: Terminal },
+    { id: "connections", label: "GITHUB_CONNECTIONS", icon: Database },
+    { id: "shares", label: "ACTIVE_PROXY_LINKS", icon: Terminal },
     { id: "analytics", label: "TELEMETRY", icon: Activity },
-    { id: "system", label: "SYSTEM_CONFIG", icon: Settings },
+    { id: "system", label: "SYSTEM_DIAGNOSTICS", icon: Settings },
   ] as const
 
-  const executeDestructiveAction = async (actionFn: () => Promise<void>, warningText: string, successMessage: string) => {
-    if (window.confirm(`CRITICAL WARNING: \${warningText}\n\nPRESS OK TO CONFIRM PERMANENT DESTRUCTION.`)) {
+  const promptDestructiveAction = (actionFn: () => Promise<void>, warningText: string, successMessage: string) => {
+    setModalState({ isOpen: true, actionFn, warningText, successMessage })
+  }
+
+  const confirmAction = async () => {
+    if (modalState.actionFn) {
       try {
-        await actionFn()
-        toast.success(successMessage)
-        if (actionFn === terminateAccount) {
+        await modalState.actionFn()
+        toast.success(modalState.successMessage)
+        if (modalState.actionFn === terminateAccount) {
           window.location.href = "/"
         }
       } catch (e) {
         toast.error("Execution failed: Authorization required or system locked")
       }
     }
+    setModalState({ ...modalState, isOpen: false })
   }
 
   return (
-    <div className="space-y-12 font-mono text-[#5eb8ff]">
+    <div className="space-y-12 font-mono text-primary">
+      {/* Alert Modal Overlay */}
+      {modalState.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+          <div className="bg-background border border-red-500 max-w-md w-full p-6 shadow-[0_0_30px_rgba(239,68,68,0.2)]">
+            <div className="flex items-center space-x-3 mb-6">
+              <ShieldAlert className="w-8 h-8 text-red-500 animate-pulse" />
+              <h3 className="text-red-500 font-bold uppercase tracking-widest text-lg">Critical Override</h3>
+            </div>
+            <div className="mb-8">
+               <p className="text-red-500/80 text-xs uppercase tracking-widest leading-relaxed">
+                 WARNING: {modalState.warningText}
+               </p>
+               <p className="text-red-500/80 text-xs uppercase tracking-widest leading-relaxed mt-4 font-bold">
+                 THIS ACTION IS PERMANENT. PROCEED WITH SYSTEM DESTRUCTION?
+               </p>
+            </div>
+            <div className="flex items-center space-x-4">
+              <Button onClick={() => setModalState({ ...modalState, isOpen: false })} className="flex-1 bg-transparent border border-primary text-primary hover:bg-primary hover:text-background rounded-none uppercase tracking-widest text-xs h-12 font-bold transition-all">
+                ABORT SEQUENCE
+              </Button>
+              <Button onClick={confirmAction} className="flex-1 bg-red-500 border border-red-500 text-white hover:bg-red-600 hover:border-red-600 rounded-none uppercase tracking-widest text-xs h-12 font-bold transition-all">
+                CONFIRM DELETION
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top Terminal Header Component */}
       <div className="flex border border-[#5eb8ff]/40 bg-[#000508] relative overflow-hidden screen-scanline">
         {tabs.map(tab => (
@@ -111,11 +151,11 @@ export default function ClientDashboard({ userId, isAppConfigured, installations
                 </div>
              </div>
 
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Master Config Card */}
                 <div className="p-6 border border-[#5eb8ff]/40 bg-[#000508]">
                   <h3 className="text-xs text-[#5eb8ff] tracking-widest mb-6 flex items-center uppercase">
-                    <ShieldAlert className="w-4 h-4 mr-2" /> Global Protocol
+                    <ShieldAlert className="w-4 h-4 mr-2" /> Master GitHub Node
                   </h3>
                   {isAppConfigured ? (
                     <div className="space-y-6">
@@ -124,14 +164,14 @@ export default function ClientDashboard({ userId, isAppConfigured, installations
                         Secure GitHub Manifest Bound
                       </div>
                       <Button className="w-full h-12 text-xs tracking-widest border border-[#5eb8ff] text-[#5eb8ff] bg-transparent hover:bg-[#5eb8ff] hover:text-[#000508] rounded-none scanline-button uppercase" onClick={handleCreateManifest}>
-                        &gt; RE-INITIALIZE MASTER MANIFEST
+                        &gt; RECREATE MASTER GITHUB APP
                       </Button>
                     </div>
                   ) : (
                     <div className="space-y-6">
-                       <p className="text-xs text-[#5eb8ff]/70 leading-relaxed uppercase tracking-wide">&gt; No external provider bound. Establishing a GitHub manifest is required to populate proxy tables.</p>
+                       <p className="text-xs text-[#5eb8ff]/70 leading-relaxed uppercase tracking-wide">&gt; No Master GitHub App detected. You must create the initial System GitHub Application to begin generating proxies.</p>
                        <Button className="w-full h-12 border border-[#5eb8ff] bg-[#5eb8ff] text-[#000508] text-xs font-bold hover:bg-[#4ea0e6] rounded-none scanline-button uppercase tracking-widest" onClick={handleCreateManifest}>
-                         &gt; EXECUTE MANIFEST BINDING
+                         &gt; BIND MASTER GITHUB APP
                        </Button>
                     </div>
                   )}
@@ -140,20 +180,20 @@ export default function ClientDashboard({ userId, isAppConfigured, installations
                 {/* Installations List Card */}
                 <div className="p-6 border border-[#5eb8ff]/40 bg-[#000508] flex flex-col">
                   <h3 className="text-xs text-[#5eb8ff] tracking-widest mb-6 flex items-center uppercase">
-                    <Globe className="w-4 h-4 mr-2" /> Active Organization Nodes
+                    <Globe className="w-4 h-4 mr-2" /> Installed GitHub Accounts
                   </h3>
 
                   {!isAppConfigured ? (
                      <div className="flex-1 flex items-center justify-center text-xs text-[#5eb8ff]/40 text-center p-4 border border-dashed border-[#5eb8ff]/40 uppercase">
-                       &gt; AWAITING MANIFEST LINKAGE
+                       &gt; WAITING FOR MASTER APP CONFIG
                      </div>
                   ) : (
                     <div className="flex-1 flex flex-col space-y-4">
                       {installations.length === 0 ? (
                         <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-[#5eb8ff]/40 bg-[#5eb8ff]/10 p-4 text-center">
-                           <p className="text-xs text-[#5eb8ff]/70 mb-4 uppercase tracking-widest">&gt; ZERO ORGANIZATIONS DISCOVERED</p>
+                           <p className="text-xs text-[#5eb8ff]/70 mb-4 uppercase tracking-widest">&gt; NO LINKED GITHUB ACCOUNTS</p>
                            <Button onClick={handleInstallApp} className="border border-[#5eb8ff] bg-[#5eb8ff] text-[#000508] hover:bg-[#4ea0e6] text-xs h-10 px-6 rounded-none tracking-widest uppercase">
-                              &gt; INSTALL APP ON ORG
+                              &gt; LINK GITHUB ACCOUNT ORG
                            </Button>
                         </div>
                       ) : (
@@ -177,7 +217,7 @@ export default function ClientDashboard({ userId, isAppConfigured, installations
                             ))}
                           </div>
                           <Button onClick={handleInstallApp} className="w-full border border-[#5eb8ff]/60 bg-transparent text-[#5eb8ff] hover:bg-[#5eb8ff] hover:text-[#000508] text-[10px] h-10 rounded-none mt-auto tracking-widest uppercase font-bold">
-                            + ADD NEW SUB-NODE
+                            + CONNECT ANOTHER ACCOUNT
                           </Button>
                         </>
                       )}
@@ -373,21 +413,21 @@ export default function ClientDashboard({ userId, isAppConfigured, installations
                 <div className="space-y-4">
                   <Button 
                     variant="outline" 
-                    onClick={() => executeDestructiveAction(flushProxies, "THIS WILL DELETE ALL ACTIVE PROXY TUNNELS AND REVOKE ACCESS.", "All proxies flushed successfully")}
+                    onClick={() => promptDestructiveAction(flushProxies, "THIS WILL DELETE ALL ACTIVE PROXY TUNNELS AND REVOKE ACCESS.", "All proxies flushed successfully")}
                     className="w-full justify-start h-12 rounded-none border-red-500/40 text-red-500 bg-transparent hover:bg-red-500 hover:text-white uppercase tracking-widest text-xs font-bold"
                   >
                     [EXECUTE] FLUSH ALL ACTIVE PROXIES
                   </Button>
                   <Button 
                     variant="outline" 
-                    onClick={() => executeDestructiveAction(purgeGitHubToken, "THIS WILL PURGE GITHUB MASTER TOKENS AND DISCONNECT ALL ORGS.", "GitHub Tokens Purged. Re-auth required.")}
+                    onClick={() => promptDestructiveAction(purgeGitHubToken, "THIS WILL PURGE GITHUB MASTER TOKENS AND DISCONNECT ALL ORGS.", "GitHub Tokens Purged. Re-auth required.")}
                     className="w-full justify-start h-12 rounded-none border-red-500/40 text-red-500 bg-transparent hover:bg-red-500 hover:text-white uppercase tracking-widest text-xs font-bold"
                   >
                     [EXECUTE] PURGE GITHUB OAUTH TOKEN
                   </Button>
                   <Button 
                     variant="outline" 
-                    onClick={() => executeDestructiveAction(terminateAccount, "THIS WILL DELETE YOUR ACCOUNT COMPLETELY AND KICK YOU OFFLINE.", "Account terminated. Session closed.")}
+                    onClick={() => promptDestructiveAction(terminateAccount, "THIS WILL DELETE YOUR ACCOUNT COMPLETELY AND KICK YOU OFFLINE.", "Account terminated. Session closed.")}
                     className="w-full justify-start h-12 rounded-none border-red-500 text-red-500 bg-red-500/10 hover:bg-red-500 hover:text-white uppercase tracking-widest text-xs font-bold"
                   >
                     [CRITICAL] TERMINATE ROOT ACCOUNT
