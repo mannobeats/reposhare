@@ -7,15 +7,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const id = rawId.replace(/\.git$/, "")
 
   const share = await prisma.share.findUnique({
-    where: { id, active: true },
-    include: { user: true }
+    where: { id, active: true }
   })
 
   if (!share || (share.expiresAt && share.expiresAt < new Date())) {
     return new NextResponse("Repository not found or link expired", { status: 404 })
   }
 
-  if (!share.user.installationId) {
+  if (!share.installationId) {
     return new NextResponse("Server configuration error", { status: 500 })
   }
 
@@ -23,7 +22,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     data: { shareId: share.id, type: "GIT_CLONE_UPLOAD", ipHash: "anonymized_via_edge" }
   }).catch(() => {})
 
-  const token = await getInstallationToken(share.user.installationId)
+  const token = await getInstallationToken(share.installationId)
   const gitUrl = `https://github.com/${share.repoFullName}.git/git-upload-pack`
 
   // Forward the binary payload pack request from the Git client directly to GitHub

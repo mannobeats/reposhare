@@ -36,6 +36,7 @@ model Share {
   passwordHash  String?
   active        Boolean   @default(true)
   allowGitClone Boolean   @default(true)
+  installationId String
   
   userId        String
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)

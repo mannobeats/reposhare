@@ -5,7 +5,7 @@ import { getOctokitForInstallation } from "@/lib/github"
 import { Octokit } from "@octokit/rest"
 import { createAppAuth } from "@octokit/auth-app"
 import ClientDashboard from "./ClientDashboard"
-import { LogOut, FolderGit2 } from "lucide-react"
+import { LogOut, TerminalSquare } from "lucide-react"
 
 export default function DashboardPage() {
   return <DashboardContent />
@@ -17,7 +17,6 @@ async function DashboardContent() {
 
   const user = await prisma.user.findUnique({ where: { email: session.user.email } })
   if (!user) {
-    // Edge case unmounted user
     await signOut()
     redirect("/")
   }
@@ -27,29 +26,46 @@ async function DashboardContent() {
 
   let repos: any[] = []
   let appSlug = ""
+  let installations: any[] = []
 
   if (isAppConfigured) {
-    if (!user.installationId) {
-      const appOctokit = new Octokit({
-        authStrategy: createAppAuth,
-        auth: { appId: config!.appId, privateKey: config!.privateKey }
-      })
+    const appOctokit = new Octokit({
+      authStrategy: createAppAuth,
+      auth: { appId: config!.appId, privateKey: config!.privateKey }
+    })
+    
+    try {
       const appData = await appOctokit.rest.apps.getAuthenticated()
       appSlug = appData.data?.slug || ""
-    } else {
-      try {
-        const octokit = await getOctokitForInstallation(user.installationId)
-        const { data } = await octokit.rest.apps.listReposAccessibleToInstallation()
-        repos = data.repositories
-      } catch (e) {
-        // installation might have been deleted but not registered via webhook
-        await prisma.user.update({ where: { id: user.id }, data: { installationId: null }})
-        redirect("/dashboard")
+      
+      const { data: instData } = await appOctokit.rest.apps.listInstallations()
+      installations = instData.map(i => ({
+        id: i.id,
+        accountName: i.account?.login || "Unknown",
+        type: i.account?.type || "Unknown",
+        avatar: i.account?.avatar_url
+      }))
+      
+      for (const inst of instData) {
+        try {
+          const octokit = await getOctokitForInstallation(inst.id)
+          const { data } = await octokit.rest.apps.listReposAccessibleToInstallation()
+          
+          const enhancedRepos = data.repositories.map(r => ({ 
+            ...r, 
+            installation_id: inst.id, 
+            account_login: inst.account?.login 
+          }))
+          repos = [...repos, ...enhancedRepos]
+        } catch (subErr) {
+          console.error(`Failed to fetch repos for installation ${inst.id}`, subErr)
+        }
       }
+    } catch (e) {
+      console.error("Failed to initialize multi-installation fetch constraints.", e)
     }
   }
 
-  // Fetch the active shares for this user
   const shares = await prisma.share.findMany({
     where: { userId: user.id },
     orderBy: { createdAt: "desc" },
@@ -58,7 +74,6 @@ async function DashboardContent() {
     }
   })
 
-  // Basic analytics rollups for the UI tab
   const analyticsByDate = await prisma.analyticEvent.groupBy({
     by: ['type', 'createdAt'],
     where: { share: { userId: user.id } },
@@ -66,32 +81,32 @@ async function DashboardContent() {
   })
 
   return (
-    <div className="min-h-screen bg-black text-white selection:bg-neutral-800 pb-20">
-      <nav className="border-b border-white/10 sticky top-0 bg-black/50 backdrop-blur-xl z-50">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+    <div className="min-h-screen bg-[#000508] text-[#5eb8ff] selection:bg-[#5eb8ff]/30 font-mono pb-20">
+      <nav className="border-b border-[#5eb8ff]/40 sticky top-0 bg-[#000508] z-50">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="h-8 w-8 bg-white rounded-lg flex items-center justify-center text-black">
-              <FolderGit2 className="w-5 h-5" />
+            <div className="h-8 w-8 border border-[#5eb8ff] flex items-center justify-center text-[#5eb8ff]">
+              <TerminalSquare className="w-4 h-4" />
             </div>
-            <span className="font-semibold tracking-tight text-lg">RepoShare</span>
+            <span className="font-bold tracking-widest text-[#5eb8ff] text-sm uppercase">LUMON CORP<span className="opacity-50">_SYS</span></span>
           </div>
           <form action={async () => {
              "use server"
              await signOut()
           }}>
-            <button className="flex items-center space-x-2 text-sm text-neutral-400 hover:text-white transition-colors">
-              <LogOut className="w-4 h-4" />
-              <span>Sign Out</span>
+            <button className="flex items-center space-x-2 text-xs uppercase font-bold tracking-widest text-[#5eb8ff]/60 hover:text-[#000508] hover:bg-[#5eb8ff] transition-colors border border-transparent hover:border-[#5eb8ff] px-3 py-1.5">
+              <LogOut className="w-3 h-3" />
+              <span>Terminate Session</span>
             </button>
           </form>
         </div>
       </nav>
 
-      <main className="max-w-6xl mx-auto px-6 py-12">
+      <main className="max-w-7xl mx-auto px-6 py-12">
         <ClientDashboard 
           userId={user.id}
           isAppConfigured={isAppConfigured}
-          installationId={user.installationId} 
+          installations={installations} 
           appSlug={appSlug} 
           repositories={repos} 
           shares={shares} 

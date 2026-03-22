@@ -3,9 +3,8 @@
 import { useState, useMemo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Github, Plus, Lock, Globe, Loader2, Link2, Copy, Trash, Pause, Play, Activity, Folders, BarChart3, Settings } from "lucide-react"
-import { createShareLink, toggleShareActive, deleteShare } from "./actions"
+import { Github, Plus, Lock, Globe, Loader2, Link2, Copy, Trash, Pause, Play, Activity, Terminal, Database, ShieldAlert, Cpu, Settings, User, LogOut, Search } from "lucide-react"
+import { createShareLink, toggleShareActive, deleteShare, flushProxies, purgeGitHubToken, terminateAccount } from "./actions"
 import { toast } from "sonner"
 import { formatDistanceToNow, format } from "date-fns"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
@@ -13,18 +12,18 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 interface Props {
   userId: string
   isAppConfigured: boolean
-  installationId: string | null
+  installations: any[]
   appSlug: string
   repositories: any[]
   shares: any[]
   analyticsData: any[]
 }
 
-export default function ClientDashboard({ isAppConfigured, installationId, appSlug, repositories, shares, analyticsData }: Props) {
+export default function ClientDashboard({ userId, isAppConfigured, installations, appSlug, repositories, shares, analyticsData }: Props) {
   const [creating, setCreating] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<"shares" | "analytics" | "settings">("shares")
+  const [activeTab, setActiveTab] = useState<"connections" | "shares" | "analytics" | "system">("connections")
+  const [searchQuery, setSearchQuery] = useState("")
 
-  // Roll up raw analytics into daily buckets for the Shadcn-style Recharts graph
   const chartData = useMemo(() => {
     const buckets: Record<string, number> = {}
     analyticsData.forEach(event => {
@@ -35,94 +34,204 @@ export default function ClientDashboard({ isAppConfigured, installationId, appSl
     return Object.entries(buckets).map(([date, views]) => ({ date, views }))
   }, [analyticsData])
 
-  const handleCreateManifest = () => {
-    window.location.href = "/api/github/manifest-redirect"
-  }
+  const filteredRepositories = repositories.filter(repo => 
+    repo.full_name.toLowerCase().includes(searchQuery.toLowerCase())
+  )
 
-  const handleInstallApp = () => {
-    window.location.href = `https://github.com/apps/\${appSlug}/installations/new`
-  }
+  const handleCreateManifest = () => window.location.href = "/api/github/manifest-redirect"
+  const handleInstallApp = () => window.location.href = `https://github.com/apps/${appSlug}/installations/new`
 
-  const handleShare = async (repoName: string) => {
+  const handleShare = async (repoName: string, installationId: string) => {
     try {
       setCreating(repoName)
-      await createShareLink(repoName, 7) // 7 days expiration by default for MVP
-      toast.success("Repository linked successfully!")
+      await createShareLink(repoName, installationId, 7)
+      toast.success("Repository matrix link established")
     } catch {
-      toast.error("Failed to share repository")
+      toast.error("Fatal proxy routing error")
     } finally {
       setCreating(null)
     }
   }
 
   const handleCopyLink = (id: string) => {
-    const link = `\${window.location.origin}/share/\${id}`
+    const link = `${window.location.origin}/share/${id}`
     navigator.clipboard.writeText(link)
-    toast.success("Share link copied to clipboard", { description: link })
+    toast.success("Data-stream copied to memory buffer")
   }
 
   const tabs = [
-    { id: "shares", label: "Shares", icon: Folders },
-    { id: "analytics", label: "Analytics", icon: BarChart3 },
-    { id: "settings", label: "Settings", icon: Settings },
+    { id: "connections", label: "NODE_NETWORKS", icon: Database },
+    { id: "shares", label: "ACTIVE_PROXIES", icon: Terminal },
+    { id: "analytics", label: "TELEMETRY", icon: Activity },
+    { id: "system", label: "SYSTEM_CONFIG", icon: Settings },
   ] as const
 
+  const executeDestructiveAction = async (actionFn: () => Promise<void>, warningText: string, successMessage: string) => {
+    if (window.confirm(`CRITICAL WARNING: \${warningText}\n\nPRESS OK TO CONFIRM PERMANENT DESTRUCTION.`)) {
+      try {
+        await actionFn()
+        toast.success(successMessage)
+        if (actionFn === terminateAccount) {
+          window.location.href = "/"
+        }
+      } catch (e) {
+        toast.error("Execution failed: Authorization required or system locked")
+      }
+    }
+  }
+
   return (
-    <div className="space-y-10">
-      <div className="flex items-center space-x-2 border-b border-white/10 pb-4">
+    <div className="space-y-12 font-mono text-[#5eb8ff]">
+      {/* Top Terminal Header Component */}
+      <div className="flex border border-[#5eb8ff]/40 bg-[#000508] relative overflow-hidden screen-scanline">
         {tabs.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors \${activeTab === tab.id ? "bg-white/10 text-white" : "text-neutral-400 hover:text-white hover:bg-white/5"}`}
+            className={`flex-1 flex items-center justify-center space-x-3 px-6 py-4 text-xs tracking-widest transition-colors ${
+              activeTab === tab.id 
+                ? "bg-[#5eb8ff] text-[#000508] font-bold scanline-active" 
+                : "text-[#5eb8ff]/70 hover:bg-[#5eb8ff]/20"
+            }`}
           >
-            <tab.icon className="w-4 h-4" />
+            <tab.icon className={`${activeTab === tab.id ? 'w-4 h-4' : 'w-4 h-4'}`} />
             <span>{tab.label}</span>
           </button>
         ))}
       </div>
 
       <AnimatePresence mode="wait">
-        
+        {activeTab === "connections" && (
+          <motion.div key="connections" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98 }} className="space-y-8">
+             <div className="flex justify-between items-end border-b border-[#5eb8ff]/40 pb-4">
+                <div>
+                  <h2 className="text-xl text-[#5eb8ff] tracking-widest flex items-center">
+                    <Cpu className="w-5 h-5 mr-3" /> System Architecture
+                  </h2>
+                </div>
+             </div>
+
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Master Config Card */}
+                <div className="p-6 border border-[#5eb8ff]/40 bg-[#000508]">
+                  <h3 className="text-xs text-[#5eb8ff] tracking-widest mb-6 flex items-center uppercase">
+                    <ShieldAlert className="w-4 h-4 mr-2" /> Global Protocol
+                  </h3>
+                  {isAppConfigured ? (
+                    <div className="space-y-6">
+                      <div className="flex items-center text-xs bg-[#5eb8ff]/20 text-[#5eb8ff] px-4 py-3 border border-[#5eb8ff]/40 uppercase tracking-widest">
+                        <div className="w-2 h-2 bg-[#5eb8ff] mr-3" />
+                        Secure GitHub Manifest Bound
+                      </div>
+                      <Button className="w-full h-12 text-xs tracking-widest border border-[#5eb8ff] text-[#5eb8ff] bg-transparent hover:bg-[#5eb8ff] hover:text-[#000508] rounded-none scanline-button uppercase" onClick={handleCreateManifest}>
+                        &gt; RE-INITIALIZE MASTER MANIFEST
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                       <p className="text-xs text-[#5eb8ff]/70 leading-relaxed uppercase tracking-wide">&gt; No external provider bound. Establishing a GitHub manifest is required to populate proxy tables.</p>
+                       <Button className="w-full h-12 border border-[#5eb8ff] bg-[#5eb8ff] text-[#000508] text-xs font-bold hover:bg-[#4ea0e6] rounded-none scanline-button uppercase tracking-widest" onClick={handleCreateManifest}>
+                         &gt; EXECUTE MANIFEST BINDING
+                       </Button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Installations List Card */}
+                <div className="p-6 border border-[#5eb8ff]/40 bg-[#000508] flex flex-col">
+                  <h3 className="text-xs text-[#5eb8ff] tracking-widest mb-6 flex items-center uppercase">
+                    <Globe className="w-4 h-4 mr-2" /> Active Organization Nodes
+                  </h3>
+
+                  {!isAppConfigured ? (
+                     <div className="flex-1 flex items-center justify-center text-xs text-[#5eb8ff]/40 text-center p-4 border border-dashed border-[#5eb8ff]/40 uppercase">
+                       &gt; AWAITING MANIFEST LINKAGE
+                     </div>
+                  ) : (
+                    <div className="flex-1 flex flex-col space-y-4">
+                      {installations.length === 0 ? (
+                        <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-[#5eb8ff]/40 bg-[#5eb8ff]/10 p-4 text-center">
+                           <p className="text-xs text-[#5eb8ff]/70 mb-4 uppercase tracking-widest">&gt; ZERO ORGANIZATIONS DISCOVERED</p>
+                           <Button onClick={handleInstallApp} className="border border-[#5eb8ff] bg-[#5eb8ff] text-[#000508] hover:bg-[#4ea0e6] text-xs h-10 px-6 rounded-none tracking-widest uppercase">
+                              &gt; INSTALL APP ON ORG
+                           </Button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex flex-col space-y-3 overflow-y-auto max-h-[160px] custom-scrollbar pr-2">
+                            {installations.map(inst => (
+                              <div key={inst.id} className="flex items-center justify-between p-3 border border-[#5eb8ff]/40 bg-[#5eb8ff]/5">
+                                <div className="flex items-center space-x-3">
+                                  {inst.avatar ? (
+                                    <img src={inst.avatar} alt="org" className="w-8 h-8 border border-[#5eb8ff]/60" style={{ filter: 'sepia(100%) hue-rotate(180deg) saturate(300%) opacity(0.8)' }} />
+                                  ) : (
+                                    <div className="w-8 h-8 border border-[#5eb8ff]/60 flex justify-center items-center"><Github className="w-4 h-4 text-[#5eb8ff]" /></div>
+                                  )}
+                                  <div>
+                                    <h4 className="text-sm font-bold text-[#5eb8ff]">{inst.accountName}</h4>
+                                    <span className="text-[10px] text-[#5eb8ff]/60 uppercase tracking-widest">{inst.type}</span>
+                                  </div>
+                                </div>
+                                <span className="text-[#000508] text-[10px] font-bold tracking-widest uppercase px-2 py-1 bg-[#5eb8ff]">CONNECTED</span>
+                              </div>
+                            ))}
+                          </div>
+                          <Button onClick={handleInstallApp} className="w-full border border-[#5eb8ff]/60 bg-transparent text-[#5eb8ff] hover:bg-[#5eb8ff] hover:text-[#000508] text-[10px] h-10 rounded-none mt-auto tracking-widest uppercase font-bold">
+                            + ADD NEW SUB-NODE
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+             </div>
+          </motion.div>
+        )}
+
         {activeTab === "shares" && (
-          <motion.div key="shares" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-12">
+          <motion.div key="shares" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98 }} className="space-y-12">
             
-            {/* Active Links Section */}
+            {/* Active Proxies Section */}
             <section className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-semibold tracking-tight">Active Share Links</h2>
-                <p className="text-sm text-neutral-400 mt-1">Manage public links and granular access controls</p>
+              <div className="border-b border-[#5eb8ff]/40 pb-4">
+                <h2 className="text-xl tracking-widest text-[#5eb8ff] uppercase">&gt; Active Proxy Endpoints</h2>
               </div>
 
               {shares.length === 0 ? (
-                <div className="p-12 border border-white/5 border-dashed rounded-2xl flex flex-col items-center justify-center text-center space-y-4 bg-white/[0.01]">
-                  <Link2 className="w-8 h-8 text-neutral-600" />
-                  <p className="text-neutral-500 font-medium text-sm">No active shares yet. Start by generating a link below.</p>
+                <div className="p-12 border border-dashed border-[#5eb8ff]/40 flex flex-col items-center justify-center text-center space-y-4 bg-[#5eb8ff]/5">
+                  <Link2 className="w-8 h-8 text-[#5eb8ff]/50" />
+                  <p className="text-[#5eb8ff]/70 text-xs tracking-widest uppercase">&gt; 0 ACTIVE STREAMS CONFIGURED</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-4">
                   {shares.map(share => (
-                    <div key={share.id} className="group flex flex-col sm:flex-row sm:items-center justify-between p-5 rounded-2xl bg-neutral-950/50 border border-white/5 font-mono text-sm shadow-[0_4px_24px_rgba(0,0,0,0.5)]">
-                      <div className="flex items-center space-x-4 mb-4 sm:mb-0">
-                        <div className={`w-2 h-2 rounded-full \${share.active ? "bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.4)]" : "bg-neutral-600"}`} />
-                        <div>
-                          <h4 className="font-semibold text-white font-sans text-base">{share.repoFullName}</h4>
-                          <div className="flex items-center space-x-3 text-neutral-500 text-xs mt-1">
-                            <span>Expires {share.expiresAt ? formatDistanceToNow(new Date(share.expiresAt), { addSuffix: true }) : "Never"}</span>
-                            <span>&bull;</span>
-                            <span className="flex items-center"><Activity className="w-3 h-3 mr-1" /> {share._count.analytics} Views</span>
-                          </div>
+                    <div key={share.id} className="relative p-5 bg-[#000508] border border-[#5eb8ff]/40 transition-colors flex flex-col md:flex-row justify-between md:items-center space-y-4 md:space-y-0 relative">
+                      <div className={`absolute top-0 left-0 w-2 h-full ${share.active ? "bg-[#5eb8ff]" : "bg-[#000508] border-r border-[#5eb8ff]/40"}`} />
+                      
+                      <div className="pl-4">
+                        <div className="flex flex-col">
+                           <h4 className="text-[#5eb8ff] font-bold text-base tracking-wide flex items-center">
+                             <span className="text-[#5eb8ff]/50 mr-2">SYS_ID:</span> {share.repoFullName}
+                           </h4>
+                           <div className="text-xs text-[#5eb8ff]/70 tracking-widest uppercase mt-2 flex items-center space-x-4">
+                             <span className="flex items-center">
+                               {share.expiresAt ? `TTL: ${formatDistanceToNow(new Date(share.expiresAt))}` : "TTL: INFINITE"}
+                             </span>
+                             <span className="flex items-center text-[#5eb8ff] bg-[#5eb8ff]/20 px-2 py-0.5 border border-[#5eb8ff]/30">
+                               {share._count.analytics} HITS
+                             </span>
+                           </div>
                         </div>
                       </div>
 
-                      <div className="flex items-center space-x-2">
-                        <Button variant="ghost" size="sm" onClick={() => handleCopyLink(share.id)} className="hover:bg-white/10 hover:text-white rounded-xl h-9">
-                          <Copy className="w-4 h-4 mr-2" /> Copy
+                      <div className="flex items-center space-x-3 pl-4">
+                        <Button variant="outline" size="sm" onClick={() => handleCopyLink(share.id)} className="h-9 rounded-none border-[#5eb8ff]/50 text-[#5eb8ff] bg-transparent hover:bg-[#5eb8ff] hover:text-[#000508] font-bold uppercase text-[10px] tracking-widest">
+                          <Copy className="w-3 h-3 mr-2" /> BUFFER URI
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => toggleShareActive(share.id, !share.active)} className="hover:bg-white/10 hover:text-white rounded-xl h-9 w-9">
+                        <Button variant="outline" size="icon" onClick={() => toggleShareActive(share.id, !share.active)} className={`h-9 w-9 rounded-none border-[#5eb8ff]/50 bg-transparent ${share.active ? "text-[#5eb8ff] hover:bg-[#5eb8ff] hover:text-[#000508]" : "text-[#5eb8ff]/40 hover:text-[#5eb8ff]"}`}>
                           {share.active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => deleteShare(share.id)} className="hover:bg-red-500/10 text-neutral-400 hover:text-red-500 rounded-xl h-9 w-9">
+                        <Button variant="outline" size="icon" onClick={() => deleteShare(share.id)} className="h-9 w-9 rounded-none border-[#5eb8ff]/50 text-[#5eb8ff]/50 bg-transparent hover:bg-[#5eb8ff] hover:text-[#000508]">
                           <Trash className="w-4 h-4" />
                         </Button>
                       </div>
@@ -132,83 +241,79 @@ export default function ClientDashboard({ isAppConfigured, installationId, appSl
               )}
             </section>
 
-            {/* Repositories Section */}
+            {/* Repositories Matrix List */}
             <section className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-semibold tracking-tight">Remote Repositories</h2>
-                  <p className="text-sm text-neutral-400 mt-1">GitHub repositories accessible by RepoShare</p>
+              <div className="flex flex-col md:flex-row md:items-end justify-between border-b border-[#5eb8ff]/40 pb-4 space-y-4 md:space-y-0">
+                <h2 className="text-xl text-[#5eb8ff] tracking-widest uppercase">&gt; Available Matrices [{repositories.length}]</h2>
+                <div className="relative w-full md:w-80">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-[#5eb8ff]/50" />
+                  <input
+                    type="text"
+                    placeholder="SEARCH PROTOCOLS..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-[#000508] border border-[#5eb8ff]/40 text-[#5eb8ff] placeholder:text-[#5eb8ff]/30 pl-10 pr-4 py-2 text-xs tracking-widest uppercase outline-none focus:border-[#5eb8ff]"
+                  />
                 </div>
-                {isAppConfigured && installationId && (
-                  <Button variant="outline" onClick={handleInstallApp} className="rounded-xl border-white/10 hover:bg-white/5 text-xs h-9">
-                    Manage GitHub Access
-                  </Button>
-                )}
               </div>
 
-              {!isAppConfigured ? (
-                <div className="p-8 border border-white/10 bg-white/5 rounded-3xl flex flex-col items-center justify-center text-center space-y-4">
-                  <Github className="w-10 h-10 text-neutral-400" />
-                  <div>
-                    <h3 className="text-lg font-medium text-white">GitHub Environment Unconfigured</h3>
-                    <p className="text-sm text-neutral-400 max-w-sm mt-1">Connect your workspace to GitHub to automatically import and proxy private repositories.</p>
-                  </div>
-                  <Button onClick={handleCreateManifest} className="bg-white text-black hover:bg-neutral-200 rounded-xl font-medium px-6 mt-2">
-                    Connect GitHub Platform
-                  </Button>
+              {repositories.length === 0 ? (
+                <div className="p-8 border border-dashed border-[#5eb8ff]/40 text-center flex flex-col items-center justify-center bg-[#5eb8ff]/5">
+                   <p className="text-[#5eb8ff]/60 text-xs tracking-widest uppercase">&gt; NO TARGET REPOSITORIES MAPPED WITHIN ACTIVE NODES</p>
                 </div>
-              ) : !installationId ? (
-                <div className="p-8 border border-white/10 bg-white/5 rounded-3xl flex flex-col items-center justify-center text-center space-y-4">
-                  <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center">
-                    <Github className="w-6 h-6 text-black" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-medium text-white">Application Ready</h3>
-                    <p className="text-sm text-neutral-400 max-w-xs mx-auto mt-1">The RepoShare App was generated. Install it on your personal GitHub Account.</p>
-                  </div>
-                  <Button onClick={handleInstallApp} className="bg-white text-black hover:bg-neutral-200 rounded-xl font-medium px-6 mt-2">
-                    Authorize Repositories
-                  </Button>
-                </div>
-              ) : repositories.length === 0 ? (
-                <div className="p-8 border border-white/5 border-dashed rounded-2xl flex items-center justify-center text-center text-neutral-500 text-sm">
-                  No repositories found. Either the GitHub App has zero access or all permissions were revoked.
+              ) : filteredRepositories.length === 0 ? (
+                <div className="p-8 border border-dashed border-[#5eb8ff]/40 text-center flex flex-col items-center justify-center bg-[#5eb8ff]/5">
+                   <p className="text-[#5eb8ff]/60 text-xs tracking-widest uppercase">&gt; QUERY YIELDED ZERO RESULTS</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {repositories.map(repo => (
-                    <div key={repo.id} className="p-5 rounded-2xl border border-white/5 bg-neutral-900/20 backdrop-blur flex flex-col justify-between">
-                      <div className="space-y-3 mb-6">
-                        <div className="flex items-start justify-between">
-                          <h3 className="font-medium text-white break-all">{repo.full_name}</h3>
-                          <Badge variant="outline" className="\${repo.private ? 'border-amber-500/30 text-amber-500 bg-amber-500/5' : 'border-green-500/30 text-green-500 bg-green-500/5'} text-[10px] uppercase font-bold tracking-wider float-right ml-2 mt-1">
-                            {repo.private ? <Lock className="w-3 h-3 inline mr-1 -mt-0.5" /> : <Globe className="w-3 h-3 inline mr-1 -mt-0.5" />}
-                            {repo.private ? "Private" : "Public"}
-                          </Badge>
-                        </div>
-                        {repo.description && (
-                          <p className="text-xs text-neutral-400 line-clamp-2 leading-relaxed">{repo.description}</p>
-                        )}
+                <div className="flex flex-col border border-[#5eb8ff]/40 bg-[#000508]">
+                  <div className="flex items-center px-4 py-3 border-b border-[#5eb8ff]/40 bg-[#5eb8ff] text-[#000508] font-bold tracking-widest text-[10px] uppercase">
+                     <span className="w-16">STATUS</span>
+                     <span className="flex-1">IDENTIFIER</span>
+                     <span className="w-48 text-right">ACTION COMMAND</span>
+                  </div>
+                  <div className="flex flex-col max-h-[500px] overflow-y-auto custom-scrollbar">
+                    {filteredRepositories.map((repo, idx) => (
+                      <div key={repo.id} className={`flex items-center px-4 py-3 hover:bg-[#5eb8ff]/10 transition-colors ${idx !== filteredRepositories.length - 1 ? 'border-b border-[#5eb8ff]/20' : ''}`}>
+                         <span className="w-16">
+                           <span className={`${repo.private ? 'text-amber-400' : 'text-[#5eb8ff]'} text-[10px] uppercase font-bold tracking-widest flex items-center`}>
+                             {repo.private ? <Lock className="w-3 h-3 mr-1" /> : <Globe className="w-3 h-3 mr-1" />}
+                           </span>
+                         </span>
+                         
+                         <span className="flex-1 text-sm tracking-wide text-[#5eb8ff] truncate pr-4">
+                           {repo.full_name}
+                         </span>
+                         
+                         <span className="w-48 text-right">
+                           <Button 
+                             onClick={() => handleShare(repo.full_name, repo.installation_id)}
+                             disabled={creating === repo.full_name}
+                             className="h-8 px-4 rounded-none border border-[#5eb8ff] bg-transparent text-[#5eb8ff] hover:bg-[#5eb8ff] hover:text-[#000508] uppercase text-[10px] tracking-widest font-bold"
+                           >
+                             {creating === repo.full_name ? <Loader2 className="w-3 h-3 animate-spin" /> : "GEN TUNNEL"}
+                           </Button>
+                         </span>
                       </div>
-                      <Button onClick={() => handleShare(repo.full_name)} disabled={creating === repo.full_name} className="w-full bg-white text-black hover:bg-neutral-200 rounded-xl font-medium transition-all active:scale-[0.98]">
-                        {creating === repo.full_name ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4 mr-2" /> Share Repository</>}
-                      </Button>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               )}
             </section>
           </motion.div>
         )}
 
-        {/* Analytics Tab */}
         {activeTab === "analytics" && (
-           <motion.div key="analytics" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} className="space-y-6">
-             <h2 className="text-2xl font-semibold tracking-tight">Platform Analytics</h2>
-             <div className="border border-white/10 rounded-3xl p-6 bg-neutral-900/20 shadow-2xl overflow-hidden">
+           <motion.div key="analytics" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98 }} className="space-y-6">
+             <div className="border-b border-[#5eb8ff]/40 pb-4">
+                <h2 className="text-xl text-[#5eb8ff] tracking-widest uppercase flex items-center">&gt; Telemetry Output</h2>
+             </div>
+             
+             <div className="border border-[#5eb8ff]/40 p-6 bg-[#000508] relative">
+               <div className="absolute inset-0 pointer-events-none opacity-20 bg-[linear-gradient(rgba(94,184,255,0.1)_1px,transparent_1px)]" style={{ backgroundSize: '100% 4px' }} />
                {chartData.length === 0 ? (
-                 <div className="h-[400px] flex items-center justify-center text-neutral-500 font-medium">
-                   No analytics data captured yet.
+                 <div className="h-[400px] flex items-center justify-center text-[#5eb8ff]/50 text-xs tracking-widest uppercase animate-pulse">
+                   &lt; / WAITING FOR INBOUND TELEMETRY &gt;
                  </div>
                ) : (
                  <div className="h-[400px] w-full">
@@ -216,18 +321,19 @@ export default function ClientDashboard({ isAppConfigured, installationId, appSl
                       <AreaChart data={chartData} margin={{ top: 20, right: 0, left: -20, bottom: 0 }}>
                         <defs>
                           <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#fff" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#fff" stopOpacity={0}/>
+                            <stop offset="5%" stopColor="#5eb8ff" stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor="#5eb8ff" stopOpacity={0.1}/>
                           </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                        <XAxis dataKey="date" stroke="rgba(255,255,255,0.3)" fontSize={12} tickLine={false} axisLine={false} />
-                        <YAxis stroke="rgba(255,255,255,0.3)" fontSize={12} tickLine={false} axisLine={false} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(94, 184, 255, 0.2)" vertical={false} />
+                        <XAxis dataKey="date" stroke="#5eb8ff" strokeOpacity={0.8} fontSize={10} tickLine={false} axisLine={false} />
+                        <YAxis stroke="#5eb8ff" strokeOpacity={0.8} fontSize={10} tickLine={false} axisLine={false} />
                         <Tooltip 
-                          contentStyle={{ backgroundColor: '#111', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '12px' }}
-                          itemStyle={{ color: '#fff' }}
+                          contentStyle={{ backgroundColor: '#000508', borderColor: 'rgba(94, 184, 255, 0.5)', borderRadius: '0px', fontSize: '12px' }}
+                          itemStyle={{ color: '#5eb8ff' }}
+                          cursor={{ stroke: 'rgba(94, 184, 255, 0.5)', strokeWidth: 1, strokeDasharray: "5 5" }}
                         />
-                        <Area type="monotone" dataKey="views" name="Platform Hits" stroke="#fff" strokeWidth={3} fillOpacity={1} fill="url(#colorViews)" />
+                        <Area type="step" dataKey="views" name="Bandwidth" stroke="#5eb8ff" strokeWidth={2} fillOpacity={1} fill="url(#colorViews)" />
                       </AreaChart>
                     </ResponsiveContainer>
                  </div>
@@ -236,35 +342,93 @@ export default function ClientDashboard({ isAppConfigured, installationId, appSl
            </motion.div>
         )}
 
-        {/* Settings Tab */}
-        {activeTab === "settings" && (
-           <motion.div key="settings" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6 max-w-xl">
-             <h2 className="text-2xl font-semibold tracking-tight">Global Configurations</h2>
-             <div className="space-y-4">
-                <div className="p-5 border border-white/10 rounded-2xl bg-white/[0.02]">
-                  <h3 className="font-semibold text-white">GitHub Integration Core</h3>
-                  <p className="text-sm text-neutral-400 mt-1 mb-4">Connect or remap the primary OAuth Application to a different target.</p>
-                  {isAppConfigured ? (
-                    <div className="flex space-x-3">
-                      <div className="flex items-center text-green-500 text-sm font-medium bg-green-500/10 px-3 rounded-lg border border-green-500/20">
-                        Active App Installed
-                      </div>
-                      <Button variant="outline" className="h-9 hover:bg-white/5 border-white/10" onClick={handleCreateManifest}>Remap Application</Button>
-                    </div>
-                  ) : (
-                    <Button onClick={handleCreateManifest} className="bg-white text-black hover:bg-neutral-200">Connect GitHub Platform</Button>
-                  )}
-                </div>
-                
-                <div className="p-5 border border-white/10 rounded-2xl bg-white/[0.02]">
-                  <h3 className="font-semibold text-white text-red-500">Danger Zone</h3>
-                  <p className="text-sm text-neutral-400 mt-1 mb-4">Purge all platform data and sharing links.</p>
-                  <Button variant="destructive" className="bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20 transition-all font-medium">Full Factory Reset</Button>
+        {activeTab === "system" && (
+           <motion.div key="system" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98 }} className="space-y-8 max-w-2xl">
+             <div className="border-b border-[#5eb8ff]/40 pb-4">
+                <h2 className="text-xl text-[#5eb8ff] tracking-widest uppercase">&gt; System Configuration</h2>
+             </div>
+
+             <div className="p-6 border border-[#5eb8ff]/40 bg-[#000508]">
+                <h3 className="text-xs text-[#5eb8ff] tracking-widest mb-6 flex items-center uppercase">
+                  <User className="w-4 h-4 mr-2" /> Administrator Profile
+                </h3>
+                <div className="flex items-center space-x-6">
+                  <div className="w-16 h-16 border border-[#5eb8ff]/60 bg-[#5eb8ff]/10 flex items-center justify-center text-[#5eb8ff]">
+                     <Terminal className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h4 className="text-[#5eb8ff] tracking-widest font-bold">OPERATOR ID: {userId.substring(0,8).toUpperCase()}</h4>
+                    <p className="text-[#5eb8ff]/50 text-xs tracking-widest uppercase mt-1">ACCESS LEVEL: OMNI_ADMIN</p>
+                  </div>
                 </div>
              </div>
+
+             <div className="p-6 border border-[#5eb8ff]/40 bg-[#000508]">
+                <h3 className="text-xs text-[#5eb8ff] tracking-widest mb-4 flex items-center uppercase text-red-500">
+                  <ShieldAlert className="w-4 h-4 mr-2" /> Destructive Protocols
+                </h3>
+                <p className="text-xs text-[#5eb8ff]/60 mb-6 leading-relaxed uppercase tracking-wider">
+                  Warning: Executive overrides below will permanently flush proxy routing tables and revoke authentication tokens without recovery.
+                </p>
+                <div className="space-y-4">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => executeDestructiveAction(flushProxies, "THIS WILL DELETE ALL ACTIVE PROXY TUNNELS AND REVOKE ACCESS.", "All proxies flushed successfully")}
+                    className="w-full justify-start h-12 rounded-none border-red-500/40 text-red-500 bg-transparent hover:bg-red-500 hover:text-white uppercase tracking-widest text-xs font-bold"
+                  >
+                    [EXECUTE] FLUSH ALL ACTIVE PROXIES
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => executeDestructiveAction(purgeGitHubToken, "THIS WILL PURGE GITHUB MASTER TOKENS AND DISCONNECT ALL ORGS.", "GitHub Tokens Purged. Re-auth required.")}
+                    className="w-full justify-start h-12 rounded-none border-red-500/40 text-red-500 bg-transparent hover:bg-red-500 hover:text-white uppercase tracking-widest text-xs font-bold"
+                  >
+                    [EXECUTE] PURGE GITHUB OAUTH TOKEN
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => executeDestructiveAction(terminateAccount, "THIS WILL DELETE YOUR ACCOUNT COMPLETELY AND KICK YOU OFFLINE.", "Account terminated. Session closed.")}
+                    className="w-full justify-start h-12 rounded-none border-red-500 text-red-500 bg-red-500/10 hover:bg-red-500 hover:text-white uppercase tracking-widest text-xs font-bold"
+                  >
+                    [CRITICAL] TERMINATE ROOT ACCOUNT
+                  </Button>
+                </div>
+             </div>
+
            </motion.div>
         )}
       </AnimatePresence>
+
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(94, 184, 255, 0.05); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(94, 184, 255, 0.4); }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(94, 184, 255, 0.8); }
+
+        .scanline-active {
+           background-image: repeating-linear-gradient(transparent, transparent 1px, rgba(0,0,0,0.2) 2px, rgba(0,0,0,0.2) 2px);
+           background-size: 100% 4px;
+        }
+
+        .scanline-button {
+           background-image: repeating-linear-gradient(transparent, transparent 2px, rgba(0,0,0,0.1) 3px, rgba(0,0,0,0.1) 4px);
+           background-size: 100% 4px;
+        }
+
+        .screen-scanline::after {
+           content: " ";
+           display: block;
+           position: absolute;
+           top: 0;
+           left: 0;
+           bottom: 0;
+           right: 0;
+           background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+           z-index: 2;
+           background-size: 100% 4px, 6px 100%;
+           pointer-events: none;
+        }
+      `}</style>
     </div>
   )
 }

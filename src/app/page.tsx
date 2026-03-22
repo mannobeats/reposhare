@@ -15,44 +15,57 @@ export default async function LandingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4">
-      <div className="absolute inset-0 z-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-neutral-900 via-black to-black opacity-60" />
+    <div className="min-h-screen relative flex flex-col items-center justify-center p-4 screen-scanline">
+      <div className="absolute inset-0 pointer-events-none opacity-20 bg-[linear-gradient(var(--primary)_1px,transparent_1px)]" style={{ backgroundSize: '100% 4px' }} />
 
-      <main className="z-10 flex flex-col items-center text-center max-w-2xl px-6">
-        <div className="mb-8 p-3 rounded-2xl bg-white/5 border border-white/10 ring-1 ring-white/5 shadow-2xl backdrop-blur-xl">
-          <Combine className="w-12 h-12 text-white" />
+      <main className="z-10 flex flex-col items-center max-w-2xl px-6 w-full relative">
+        <div className="mb-12 flex flex-col items-center">
+          <Terminal className="w-16 h-16 text-primary mb-6 animate-pulse" />
+          <h1 className="text-4xl md:text-5xl font-bold tracking-[0.2em] mb-4 text-primary uppercase text-center">
+            Welcome to Lumon
+          </h1>
+          <p className="text-sm text-primary/70 max-w-lg leading-relaxed uppercase tracking-widest text-center">
+            &gt; Please authenticate to access secure repositories.
+          </p>
         </div>
-        
-        <h1 className="text-5xl font-semibold tracking-tighter mb-4">
-          RepoShare <span className="text-neutral-500">Platform</span>
-        </h1>
-        
-        <p className="text-lg text-neutral-400 mb-10 max-w-lg leading-relaxed font-medium">
-          A secure, self-hosted proxy for selectively sharing private GitHub repositories natively through web interfaces and terminal environments.
-        </p>
 
-        <div className="w-full max-w-sm space-y-4">
+        <div className="w-full max-w-sm space-y-8">
           <form action={async (formData) => {
             "use server"
             await signIn("credentials", formData)
-          }} className="space-y-4 p-6 bg-white/5 border border-white/10 rounded-3xl backdrop-blur-xl">
-            <h2 className="text-xl font-medium text-white mb-2 text-left">Admin Login</h2>
-            <input 
-              name="email" 
-              type="email" 
-              placeholder="Email Address" 
-              required 
-              className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 placeholder:text-neutral-600 focus:ring-1 focus:ring-white/20 outline-none transition-all"
-            />
-            <input 
-              name="password" 
-              type="password" 
-              placeholder="Password" 
-              required 
-              className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 placeholder:text-neutral-600 focus:ring-1 focus:ring-white/20 outline-none transition-all"
-            />
-            <button className="w-full bg-white text-black font-medium py-3 rounded-xl hover:bg-neutral-200 active:scale-95 transition-all">
-              Sign In to Dashboard
+          }} className="space-y-6 p-8 border border-primary/40 bg-background shadow-[0_0_30px_rgba(94,184,255,0.05)] relative">
+            <div className="absolute top-0 left-0 w-2 h-full bg-primary" />
+            
+            <h2 className="text-sm font-bold text-primary mb-6 uppercase tracking-widest flex items-center">
+              Employee Login
+            </h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="text-[10px] uppercase text-primary/60 tracking-widest block mb-2">Employee ID (Email):</label>
+                <input 
+                  name="email" 
+                  type="email" 
+                  placeholder="08-927..." 
+                  required 
+                  className="w-full bg-background border border-primary/40 px-4 py-3 placeholder:text-primary/30 outline-none text-primary uppercase tracking-widest font-bold focus:border-primary transition-colors text-xs"
+                />
+              </div>
+              
+              <div>
+                <label className="text-[10px] uppercase text-primary/60 tracking-widest block mb-2">Passcode:</label>
+                <input 
+                  name="password" 
+                  type="password" 
+                  placeholder="********" 
+                  required 
+                  className="w-full bg-background border border-primary/40 px-4 py-3 placeholder:text-primary/30 outline-none text-primary uppercase tracking-widest font-bold focus:border-primary transition-colors text-xs"
+                />
+              </div>
+            </div>
+
+            <button className="w-full bg-primary text-background font-bold py-4 uppercase tracking-widest text-xs hover:bg-[#4ea0e6] transition-all scanline-button mt-4">
+              Authenticate
             </button>
           </form>
 
@@ -60,24 +73,16 @@ export default async function LandingPage() {
             "use server"
             await signIn("github")
           }}>
-            <button className="group relative flex items-center justify-center space-x-3 w-full py-4 bg-transparent border border-white/10 hover:bg-white/5 text-white rounded-2xl font-medium transition-all hover:scale-[1.02] active:scale-[0.98]">
-              <Github className="w-5 h-5 text-neutral-400 group-hover:text-white transition-colors" />
-              <span>Continue with GitHub</span>
+            <button className="flex items-center justify-center space-x-3 w-full py-4 bg-transparent border border-primary/40 text-primary hover:bg-primary hover:text-background font-bold uppercase tracking-widest text-xs transition-colors rounded-none">
+              <Github className="w-4 h-4" />
+              <span>External Identity</span>
             </button>
           </form>
         </div>
 
-        <div className="mt-16 grid grid-cols-1 md:grid-cols-2 gap-6 w-full text-left">
-          <div className="space-y-2 p-5 rounded-2xl bg-white/[0.02] border border-white/5">
-            <Code className="w-5 h-5 text-neutral-400 mb-3" />
-            <h3 className="font-medium text-white">Browser Proxying</h3>
-            <p className="text-sm text-neutral-500">Read READMEs and download fully authenticated ZIP packages transparently.</p>
-          </div>
-          <div className="space-y-2 p-5 rounded-2xl bg-white/[0.02] border border-white/5">
-            <Terminal className="w-5 h-5 text-neutral-400 mb-3" />
-            <h3 className="font-medium text-white">Native CLI Integration</h3>
-            <p className="text-sm text-neutral-500">Execute direct <code>git clone</code> commands on generated links without credentials.</p>
-          </div>
+        <div className="mt-20 w-full flex flex-col items-center">
+           <span className="text-[10px] text-primary/40 tracking-[0.3em] uppercase block mb-2">SYSTEM STATUS: ONLINE</span>
+           <span className="text-[10px] text-primary/40 tracking-[0.3em] uppercase">VER: 2.1.0_PROX</span>
         </div>
       </main>
     </div>
