@@ -33,7 +33,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       "Authorization": `Basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`,
       "Content-Type": req.headers.get("content-type") || "application/x-git-upload-pack-request",
       "Accept": req.headers.get("accept") || "application/x-git-upload-pack-result",
-      "User-Agent": "GitShare Proxy",
+      "User-Agent": "RepoShare Proxy",
     },
     body: req.body, // Standard streaming forwarding
     // @ts-ignore - Required for native Node fetch body streaming 

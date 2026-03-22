@@ -1,6 +1,8 @@
 import NextAuth from "next-auth"
 import GitHub from "next-auth/providers/github"
+import Credentials from "next-auth/providers/credentials"
 import { prisma } from "@/lib/prisma"
+import bcrypt from "bcryptjs"
 
 export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
   let clientId = "UNCONFIGURED"
@@ -19,6 +21,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
   return {
     secret: process.env.NEXTAUTH_SECRET || "super_secret_fallback_do_not_use_in_prod",
     providers: [
+      Credentials({
+        name: "Admin Login",
+        credentials: {
+          email: { label: "Email", type: "email" },
+          password: { label: "Password", type: "password" }
+        },
+        async authorize(credentials) {
+          if (!credentials?.email || !credentials?.password) return null
+          
+          const user = await prisma.user.findUnique({ where: { email: credentials.email as string } })
+          if (!user || (!user.passwordHash)) return null
+          
+          const mathPass = await bcrypt.compare(credentials.password as string, user.passwordHash)
+          if (!mathPass) return null
+          
+          return { id: user.id, email: user.email, name: user.name, image: user.image }
+        }
+      }),
       GitHub({ 
         clientId, 
         clientSecret,
@@ -26,7 +46,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
       })
     ],
     callbacks: {
-      async signIn({ user, profile }) {
+      async signIn({ user, account, profile }) {
+        if (account?.provider === "credentials") return true
+        
         if (!user.email || !profile) return false
         
         // Custom syncing to avoid needing full heavy NextAuth adapters

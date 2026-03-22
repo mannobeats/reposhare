@@ -27,7 +27,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github.v3+json",
-      "User-Agent": "GitShare Platform",
+      "User-Agent": "RepoShare Platform",
     },
     // Prevent Next.js from aggressively caching the binary blob stream
     cache: "no-store",

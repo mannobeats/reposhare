@@ -13,6 +13,7 @@ model SystemConfig {
   clientSecret    String
   webhookSecret   String
   privateKey      String
+  publicUrl       String?
   isSetupComplete Boolean  @default(true)
 }
 
@@ -20,6 +21,8 @@ model User {
   id              String   @id @default(cuid())
   name            String?
   email           String?  @unique
+  passwordHash    String?
+  role            String   @default("USER")
   image           String?
   installationId  String?
   shares          Share[]

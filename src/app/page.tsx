@@ -24,27 +24,48 @@ export default async function LandingPage() {
         </div>
         
         <h1 className="text-5xl font-semibold tracking-tighter mb-4">
-          GitShare <span className="text-neutral-500">Platform</span>
+          RepoShare <span className="text-neutral-500">Platform</span>
         </h1>
         
         <p className="text-lg text-neutral-400 mb-10 max-w-lg leading-relaxed font-medium">
           A secure, self-hosted proxy for selectively sharing private GitHub repositories natively through web interfaces and terminal environments.
         </p>
 
-        <form action={async () => {
-          "use server"
-          await signIn("github")
-        }} className="w-full sm:w-auto">
-          <button 
-            type="submit" 
-            className="group relative flex items-center justify-center space-x-3 w-full sm:w-auto px-8 py-4 bg-white text-black rounded-full font-medium transition-all hover:scale-105 active:scale-95 shadow-[0_0_40px_rgba(255,255,255,0.15)] hover:shadow-[0_0_60px_rgba(255,255,255,0.3)]"
-          >
-            <Github className="w-5 h-5 transition-transform group-hover:rotate-12" />
-            <span>Authenticate via GitHub</span>
-            
-            <div className="absolute inset-0 rounded-full ring-2 ring-white/20 ring-offset-2 ring-offset-black opacity-0 group-hover:opacity-100 transition-opacity" />
-          </button>
-        </form>
+        <div className="w-full max-w-sm space-y-4">
+          <form action={async (formData) => {
+            "use server"
+            await signIn("credentials", formData)
+          }} className="space-y-4 p-6 bg-white/5 border border-white/10 rounded-3xl backdrop-blur-xl">
+            <h2 className="text-xl font-medium text-white mb-2 text-left">Admin Login</h2>
+            <input 
+              name="email" 
+              type="email" 
+              placeholder="Email Address" 
+              required 
+              className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 placeholder:text-neutral-600 focus:ring-1 focus:ring-white/20 outline-none transition-all"
+            />
+            <input 
+              name="password" 
+              type="password" 
+              placeholder="Password" 
+              required 
+              className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 placeholder:text-neutral-600 focus:ring-1 focus:ring-white/20 outline-none transition-all"
+            />
+            <button className="w-full bg-white text-black font-medium py-3 rounded-xl hover:bg-neutral-200 active:scale-95 transition-all">
+              Sign In to Dashboard
+            </button>
+          </form>
+
+          <form action={async () => {
+            "use server"
+            await signIn("github")
+          }}>
+            <button className="group relative flex items-center justify-center space-x-3 w-full py-4 bg-transparent border border-white/10 hover:bg-white/5 text-white rounded-2xl font-medium transition-all hover:scale-[1.02] active:scale-[0.98]">
+              <Github className="w-5 h-5 text-neutral-400 group-hover:text-white transition-colors" />
+              <span>Continue with GitHub</span>
+            </button>
+          </form>
+        </div>
 
         <div className="mt-16 grid grid-cols-1 md:grid-cols-2 gap-6 w-full text-left">
           <div className="space-y-2 p-5 rounded-2xl bg-white/[0.02] border border-white/5">

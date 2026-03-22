@@ -1,15 +1,17 @@
 import { NextResponse, NextRequest } from "next/server"
+import { prisma } from "@/lib/prisma"
 
 export async function GET(req: NextRequest) {
-  // Use the inbound request URL to generate dynamic webhook and callback URLs
-  const baseUrl = new URL(req.url).origin
+  const config = await prisma.systemConfig.findUnique({ where: { id: "singleton" } })
   
-  const manifest = {
-    name: "GitShare Platform",
+  let baseUrl = config?.publicUrl || new URL(req.url).origin
+  if (baseUrl.endsWith("/")) baseUrl = baseUrl.slice(0, -1)
+  
+  const isPublicUrl = baseUrl.startsWith("https://") && !baseUrl.includes("localhost") && !baseUrl.includes("127.0.0.1")
+
+  const manifest: any = {
+    name: "GitShare Hub",
     url: baseUrl,
-    hook_attributes: {
-      url: `${baseUrl}/api/github/webhook`
-    },
     redirect_url: `${baseUrl}/api/github/setup`,
     callback_urls: [`${baseUrl}/api/auth/callback/github`],
     public: false,
@@ -17,15 +19,20 @@ export async function GET(req: NextRequest) {
       contents: "read",
       metadata: "read",
       emails: "read"
-    },
-    default_events: [
-      "installation",
-      "installation_repositories", 
-      "meta"
-    ]
+    }
   }
 
-  // Construct HTML that quietly auto-submits the form to GitHub Developer settings
+  // GitHub strictly blocks localhost hook_attributes and throws "Hook is invalid"
+  if (isPublicUrl) {
+    manifest.hook_attributes = {
+      url: `${baseUrl}/api/github/webhook`
+    }
+  }
+
+  // We explicitly do NOT specify `default_events`. 
+  // Selecting "installation" without administration permission breaks the GitHub Manifest flow natively.
+  // We can let the user optionally click those later, or they are auto-applied by github intelligently if hooks are present.
+
   const html = `
     <!DOCTYPE html>
     <html lang="en">
@@ -37,7 +44,7 @@ export async function GET(req: NextRequest) {
     <body onload="document.getElementById('manifestForm').submit()">
       <div style="text-align: center;">
         <div class="loader" style="border: 2px solid rgba(255,255,255,0.1); border-top: 2px solid white; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; margin: 0 auto 16px;"></div>
-        <span>Configuring Environment...</span>
+        <span>Configuring External Environment...</span>
       </div>
       <form id="manifestForm" action="https://github.com/settings/apps/new" method="post">
         <input type="hidden" name="manifest" id="manifest" value='${JSON.stringify(manifest).replace(/'/g, "&#39;")}' />

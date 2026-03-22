@@ -45,7 +45,7 @@ export default async function SharedRepositoryPage({ params }: { params: Promise
 
   // Generate dynamic connection string
   // If the origin proxy is not possible universally without SSR headers, we fallback to a native template string
-  const cloneCmd = `git clone ${process.env.NEXT_PUBLIC_SITE_URL || "https://gitshare.domain"}/share/${cleanId}.git`
+  const cloneCmd = `git clone ${process.env.NEXT_PUBLIC_SITE_URL || "https://reposhare.domain"}/share/${cleanId}.git`
 
   return (
     <div className="min-h-screen bg-[#050505] text-white selection:bg-neutral-800 pb-20 font-sans">

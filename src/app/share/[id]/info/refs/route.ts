@@ -42,7 +42,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const gitResponse = await fetch(gitUrl, {
     headers: {
       "Authorization": `Basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`,
-      "User-Agent": "GitShare Proxy",
+      "User-Agent": "RepoShare Proxy",
       "Git-Protocol": req.headers.get("git-protocol") || "version=2"
     }
   })
