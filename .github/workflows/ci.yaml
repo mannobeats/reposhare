@@ -1,10 +1,16 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
+    tags:
+      - "v*"
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   lint-and-build:
@@ -27,18 +33,27 @@ jobs:
       - name: Generate Prisma Client
         run: npx prisma generate
 
+      - name: Initialize local database
+        run: npm run db:init
+
       - name: Lint
         run: npm run lint
 
       - name: Build
         run: npm run build
         env:
-          DATABASE_URL: "postgresql://test:test@localhost:5432/test"
+          DATABASE_URL: file:./prisma/dev.db
+          PUBLIC_URL: http://localhost:3417
+          APP_SECRET: test-build-secret-test-build-secret
+          PORT: 3417
 
   docker:
-    name: Docker Build
+    name: Docker Image
     runs-on: ubuntu-latest
     needs: lint-and-build
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Checkout
@@ -47,11 +62,30 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image
+      - name: Log in to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=tag
+            type=sha,format=short
+
+      - name: Build and optionally push image
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: false
-          tags: reposhare:test
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

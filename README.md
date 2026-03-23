@@ -1,206 +1,182 @@
-<div align="center">
+# RepoShare
 
-# 🔗 RepoShare
+Self-hosted private repository sharing for people who should be able to clone or download a repo without needing their own GitHub access.
 
-**Securely share private GitHub repositories via proxy URLs.**
+RepoShare sits between GitHub and your recipients:
 
-[![CI](https://github.com/mannobeats/reposhare/actions/workflows/ci.yaml/badge.svg)](https://github.com/mannobeats/reposhare/actions/workflows/ci.yaml)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](docker-compose.yaml)
+- You install RepoShare once on your own server.
+- You connect a GitHub App to the repositories you want to share.
+- RepoShare creates share links for cloning and ZIP downloads.
+- Recipients use the link. GitHub credentials never leave your server.
 
-*Self-hosted platform that creates shareable proxy URLs for your private GitHub repositories — without exposing credentials.*
+## What Changed
 
-</div>
+RepoShare now ships with a simpler hosting model on purpose:
 
----
+- One container
+- One SQLite database file
+- One `data/` directory to back up
+- No PostgreSQL
+- No external database setup
 
-## ✨ What is RepoShare?
+This makes the default deployment much better for home labs, small VPSs, and single-instance self-hosting.
 
-RepoShare acts as a **Git proxy bridge** between your private GitHub repositories and anyone you want to share them with. When you create a share link, RepoShare:
+## Architecture
 
-1. Generates a unique URL for your private repository
-2. Proxies Git Smart HTTP protocol requests through your server
-3. Authenticates with GitHub using short-lived Installation Access Tokens
-4. Anyone with the link can `git clone` the repo — no GitHub account needed
-
-```bash
-# Your collaborator runs this — no GitHub credentials required
-git clone https://share.yourdomain.com/share/abc123-def456.git
+```text
+Git client / browser
+        |
+        v
+ RepoShare (Next.js app + SQLite)
+        |
+        v
+     GitHub API
 ```
 
-## 🏗️ Architecture
+## Quick Start
 
-```
-┌─────────────┐     ┌──────────────────┐     ┌─────────────┐
-│  Git Client  │────▶│   RepoShare      │────▶│  GitHub API  │
-│  or Browser  │◀────│   (Your Server)  │◀────│  (Private)   │
-└─────────────┘     └──────────────────┘     └─────────────┘
-                         │         ▲
-                         ▼         │
-                    ┌──────────────┐
-                    │  PostgreSQL  │
-                    └──────────────┘
-```
-
-**Key Features:**
-- 🔐 **Proxy-based sharing** — credentials never leave your server
-- 📦 **Git clone + ZIP download** — full flexibility for recipients
-- ⏰ **Expiring links** — set time-limited access
-- 🏠 **Self-hosted** — runs on your infrastructure (home lab, VPS, cloud)
-- 🐳 **Docker-ready** — one command deployment
-- 📊 **Analytics** — track views, clones, and downloads per link
-
----
-
-## 🚀 Quick Start
-
-### Option 1: One-Liner Install (Recommended)
+### Option 1: One-liner installer
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mannobeats/reposhare/main/install.sh | bash
 ```
 
-The interactive installer will:
-- ✅ Check for Docker & Git
-- ✅ Prompt for installation directory, port, and domain
-- ✅ Generate secure passwords and secrets
-- ✅ Build and start all services
-- ✅ Apply database migrations
+The installer:
 
-### Option 2: Docker Compose (Manual)
+- auto-detects a usable local URL if you do not provide one
+- lets you choose direct access or reverse-proxy mode
+- generates strong secrets automatically
+- writes a minimal `.env`
+- pulls and starts RepoShare from `ghcr.io/mannobeats/reposhare`
+
+After install, open the printed URL and finish the setup wizard.
+
+### Option 2: Docker Compose
 
 ```bash
-# Clone the repository
 git clone https://github.com/mannobeats/reposhare.git
 cd reposhare
-
-# Create your environment file
 cp .env.example .env
-# Edit .env with your settings (see Configuration section below)
-
-# Start services
 docker compose up -d
-
-# Apply database schema
-docker compose exec app npx prisma db push
 ```
 
-### Option 3: Local Development
+That is enough for a working install. RepoShare initializes the SQLite database automatically on container start.
+
+### Option 3: Local development
 
 ```bash
-# Clone and install
 git clone https://github.com/mannobeats/reposhare.git
 cd reposhare
 npm install
-
-# Setup environment
 cp .env.example .env
-# Edit .env — set your DATABASE_URL to a local PostgreSQL instance
-
-# Initialize database
-npx prisma db push
-
-# Start dev server
+npm run db:init
 npm run dev
 ```
 
----
+Local development uses `./prisma/dev.db`.
 
-## ⚙️ Configuration
+## Configuration
 
-### Environment Variables
-
-Create a `.env` file in the project root (or use the installer):
+RepoShare is intentionally small now. Most installs only need these settings:
 
 ```env
-# ── Database ─────────────────────────────────────────────────
-POSTGRES_USER=reposhare
-POSTGRES_PASSWORD=your_secure_password_here
-POSTGRES_DB=reposhare
-DATABASE_URL=postgresql://reposhare:your_secure_password_here@db:5432/reposhare
-
-# ── Application ──────────────────────────────────────────────
-# Public URL where RepoShare is accessible (used for clone URLs and GitHub webhooks)
-# Examples:
-#   - https://share.yourdomain.com  (production with reverse proxy)
-#   - http://192.168.1.100:3000     (home lab, LAN access)
-#   - http://localhost:3000          (local development)
-PUBLIC_URL=http://localhost:3000
-
-# Auth secret — auto-generated if not specified
-# Generate one: openssl rand -base64 32
-NEXTAUTH_SECRET=
-
-# Port to expose (default: 3000)
-PORT=3000
+PORT=3417
+BIND_ADDRESS=0.0.0.0
+PUBLIC_URL=http://localhost:3417
+APP_SECRET=replace_with_a_long_random_secret
 ```
 
-### `.env.example`
+### Variable reference
 
-A template is included in the repository. Copy it and fill in your values:
+- `PUBLIC_URL`
+  Used for share links, GitHub callback URLs, and webhook URLs. If you leave it blank in development, RepoShare can infer the current request origin.
+- `APP_SECRET`
+  Main signing secret for sessions and auth.
+- `DATABASE_URL`
+  SQLite file location. Use `file:/data/reposhare.db` in Docker and `file:./prisma/dev.db` for local development.
+- `BIND_ADDRESS`
+  Use `127.0.0.1` when you run RepoShare behind a reverse proxy on the same host.
 
-```bash
-cp .env.example .env
-```
+## Setup Flow
 
----
+### 1. Create the admin account
 
-## 🔧 Setup Guide
+On first boot, RepoShare opens a setup page where you:
 
-### 1. First-Time Setup
+1. create the first admin account
+2. optionally confirm or override the public URL
 
-After starting RepoShare, navigate to `http://your-server:3000` in your browser. You'll be greeted by the **setup wizard** where you:
-
-1. **Create your admin account** (email + password)
-2. **Set the public URL** (optional — required for GitHub webhooks)
-
-### 2. Connect GitHub
+### 2. Create the GitHub App
 
 From the dashboard:
 
-1. Click **"Create GitHub App"** — this redirects to GitHub's App Manifest flow
-2. GitHub will ask you to confirm the app creation
-3. You'll be redirected back — the app credentials are saved automatically
-4. **Install the app** on your GitHub account or organization
-5. Select which repositories to grant access to
+1. click the GitHub App setup button
+2. GitHub runs the App Manifest flow
+3. RepoShare stores the returned app credentials
+4. install the GitHub App on the account or organization that owns the repositories
 
-### 3. Create Share Links
+### 3. Create share links
 
-1. Go to the **"Proxy Endpoints"** tab
-2. Select a repository from the dropdown
-3. Optionally set an expiration period
-4. Click **"Generate Proxy Link"**
-5. Share the generated URL with anyone!
+From the dashboard:
 
----
+1. pick a repository
+2. generate a share link
+3. send the link to the recipient
 
-## 🌐 Deployment Scenarios
+Recipients can:
 
-### Public Server (VPS / Cloud)
+- `git clone https://your-host/share/<id>.git`
+- open the public share page
+- download a ZIP snapshot
 
-The recommended production deployment uses a reverse proxy for HTTPS:
+## Deployment Modes
 
+### Direct access on a LAN or VPS
+
+Use:
+
+```env
+BIND_ADDRESS=0.0.0.0
+PUBLIC_URL=http://your-server-ip:3417
 ```
-Internet → Nginx/Caddy (HTTPS) → RepoShare (:3000) → GitHub API
+
+This is the simplest mode when you do not need HTTPS termination inside RepoShare itself.
+
+### Behind your own reverse proxy
+
+Use:
+
+```env
+BIND_ADDRESS=127.0.0.1
+PUBLIC_URL=https://share.example.com
 ```
 
-#### With Nginx
+RepoShare does not include a reverse proxy. That is intentional. Bring your own Nginx, Caddy, Traefik, or tunnel.
+
+Your proxy must:
+
+- forward `Host`
+- forward `X-Forwarded-For`
+- forward `X-Forwarded-Host`
+- forward `X-Forwarded-Proto`
+- disable buffering for Git HTTP traffic when possible
+
+#### Nginx example
 
 ```nginx
 server {
     listen 443 ssl http2;
-    server_name share.yourdomain.com;
+    server_name share.example.com;
 
-    ssl_certificate     /etc/letsencrypt/live/share.yourdomain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/share.yourdomain.com/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/share.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/share.example.com/privkey.pem;
 
-    # Important: disable request buffering for git operations
+    client_max_body_size 0;
     proxy_request_buffering off;
     proxy_buffering off;
-    client_max_body_size 0;
 
     location / {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://127.0.0.1:3417;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -210,167 +186,89 @@ server {
 }
 ```
 
-#### With Caddy (auto-HTTPS)
+#### Caddy example
 
-```Caddyfile
-share.yourdomain.com {
-    reverse_proxy localhost:3000
+```caddyfile
+share.example.com {
+    request_body {
+        max_size 0
+    }
+
+    reverse_proxy 127.0.0.1:3417 {
+        header_up Host {host}
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-Host {host}
+        flush_interval -1
+    }
 }
 ```
 
-Set your `.env`:
-```env
-PUBLIC_URL=https://share.yourdomain.com
-```
+### Tunnel-based access
 
-### Home Lab (LAN Only)
+You can also keep RepoShare private on the host and expose it through a tunnel:
 
-RepoShare works great on a home lab for sharing within your local network:
+- Cloudflare Tunnel
+- Tailscale Funnel
+- ngrok
 
-```env
-PUBLIC_URL=http://192.168.1.100:3000
-```
+In those cases, set `PUBLIC_URL` to the final external URL the recipient will use.
 
-> **Note:** GitHub webhooks won't reach your server without a public URL, but this is non-critical. The dashboard fetches installation data directly from the GitHub API.
+## Backups and Restore
 
-### Home Lab + Tunnel (External Access)
+RepoShare keeps all state in:
 
-For sharing outside your LAN without exposing ports, use a tunnel service:
+- `./data/reposhare.db`
+- `.env`
 
-#### Cloudflare Tunnel (Recommended)
+That means backup is simple:
 
 ```bash
-# Install cloudflared
-brew install cloudflared  # or your package manager
-
-# Create tunnel
-cloudflared tunnel create reposhare
-cloudflared tunnel route dns reposhare share.yourdomain.com
-
-# Run tunnel
-cloudflared tunnel run --url http://localhost:3000 reposhare
+bash install.sh backup
 ```
 
-#### Tailscale Funnel
+Restore is simple too:
 
 ```bash
-tailscale funnel 3000
+bash install.sh restore /path/to/backup.tar.gz
 ```
 
-#### ngrok
+## Installer Commands
+
+The installer script also works as a maintenance tool:
 
 ```bash
-ngrok http 3000
+bash install.sh install
+bash install.sh update
+bash install.sh backup
+bash install.sh restore /path/to/backup.tar.gz
+bash install.sh status
 ```
 
-Update `PUBLIC_URL` in `.env` to match the tunnel URL.
+## Health Check
 
----
+RepoShare exposes:
 
-## 📁 Project Structure
-
-```
-reposhare/
-├── src/
-│   ├── app/
-│   │   ├── api/
-│   │   │   ├── auth/          # NextAuth.js authentication
-│   │   │   ├── download/      # ZIP download endpoint
-│   │   │   └── github/        # GitHub App setup & webhooks
-│   │   ├── dashboard/         # Admin dashboard
-│   │   ├── setup/             # First-time setup wizard
-│   │   └── share/[id]/        # Public share page + Git proxy
-│   │       ├── page.tsx       # Share page UI
-│   │       ├── info/refs/     # Git Smart HTTP refs endpoint
-│   │       └── git-upload-pack/ # Git Smart HTTP pack endpoint
-│   ├── components/ui/         # Reusable UI components
-│   └── lib/                   # Shared utilities (Prisma, GitHub)
-├── prisma/
-│   └── schema.prisma          # Database schema
-├── docker-compose.yaml        # Docker Compose configuration
-├── Dockerfile                 # Multi-stage production build
-├── install.sh                 # One-liner interactive installer
-└── .github/workflows/         # CI/CD pipeline
+```text
+/api/health
 ```
 
----
+The Docker Compose file uses this endpoint for container health checks.
 
-## 🔒 Security
+## Development Notes
 
-RepoShare is designed with security in mind:
+- RepoShare is optimized for a single-instance deployment model.
+- SQLite is the only supported database.
+- The app uses checked-in SQL migrations plus a lightweight SQLite migration runner at startup.
+- `npm run db:init` applies local migrations without requiring a separate database service.
+- Production installs are image-based and pull from `ghcr.io/mannobeats/reposhare`.
 
-- **Short-lived tokens** — GitHub Installation Access Tokens expire after 1 hour
-- **No credential sharing** — GitHub credentials never leave your server
-- **Auth-protected dashboard** — all admin actions require authentication
-- **Ownership verification** — users can only manage their own share links
-- **Setup guard** — the setup page is locked after initial configuration
-- **Non-root Docker** — the container runs as an unprivileged user
+## Why SQLite Only
 
-### Security Best Practices
+This product is a natural fit for SQLite:
 
-1. **Always use HTTPS** in production (via reverse proxy)
-2. **Set a strong `NEXTAUTH_SECRET`** — the installer generates one automatically
-3. **Use a strong PostgreSQL password** — never use defaults in production
-4. **Keep RepoShare updated** — pull the latest version regularly
+- single-node deployment
+- low write volume
+- simple backup story
+- fewer things for self-hosters to manage
 
----
-
-## 🛠️ Development
-
-```bash
-# Install dependencies
-npm install
-
-# Generate Prisma client
-npx prisma generate
-
-# Start development server
-npm run dev
-
-# Run linter
-npm run lint
-
-# Build for production
-npm run build
-```
-
-### Database Migrations
-
-```bash
-# Create a migration
-npx prisma migrate dev --name your_migration_name
-
-# Apply migrations in production
-npx prisma migrate deploy
-
-# Reset database (development only)
-npx prisma migrate reset
-```
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Commit your changes (`git commit -m 'feat: add my feature'`)
-4. Push to the branch (`git push origin feature/my-feature`)
-5. Open a Pull Request
-
----
-
-## 📄 License
-
-This project is licensed under the **Apache License 2.0** — see the [LICENSE](LICENSE) file for details.
-
----
-
-<div align="center">
-
-**Built with ❤️ using Next.js, Prisma, and PostgreSQL**
-
-[Report a Bug](https://github.com/mannobeats/reposhare/issues) · [Request a Feature](https://github.com/mannobeats/reposhare/issues)
-
-</div>
+If RepoShare ever needs clustered or multi-writer deployments later, database strategy can be revisited. For the current product shape, SQLite keeps the deployment honest and dramatically simpler.

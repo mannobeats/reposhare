@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
+import { normalizePublicUrl } from "@/lib/base-url"
 
 export async function setupPlatform(formData: FormData) {
   // Guard: do not allow re-initialization once an admin exists
@@ -12,7 +13,8 @@ export async function setupPlatform(formData: FormData) {
 
   const email = formData.get("email") as string
   const password = formData.get("password") as string
-  const publicUrl = formData.get("publicUrl") as string | null
+  const publicUrlInput = (formData.get("publicUrl") as string | null) || ""
+  const publicUrl = publicUrlInput.trim() ? normalizePublicUrl(publicUrlInput) : null
 
   if (!email || !password) {
     throw new Error("Admin credentials are required")

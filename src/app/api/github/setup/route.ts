@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { getCanonicalBaseUrl } from "@/lib/base-url"
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
@@ -47,7 +48,7 @@ export async function GET(req: NextRequest) {
     })
 
     // Now securely redirect the admin to the dashboard
-    return NextResponse.redirect(`${url.origin}/dashboard?setup=success`)
+    return NextResponse.redirect(`${await getCanonicalBaseUrl()}/dashboard?setup=success`)
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error"
     return NextResponse.json({ error: "Failed to process the GitHub manifest integration.", message }, { status: 500 })

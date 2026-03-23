@@ -27,3 +27,5 @@ Thumbs.db
 *.md
 !README.md
 LICENSE
+prisma/*.db
+data

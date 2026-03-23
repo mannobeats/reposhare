@@ -5,14 +5,16 @@ import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import crypto from "crypto"
 
-// Generate a deterministic but unique secret from the database URL if NEXTAUTH_SECRET is not set
 function getAuthSecret(): string {
-  const envSecret = process.env.NEXTAUTH_SECRET
+  const envSecret = process.env.APP_SECRET
   if (envSecret && envSecret.length >= 32) return envSecret
 
-  // Derive a secret from DATABASE_URL — unique per installation but consistent across restarts
-  const dbUrl = process.env.DATABASE_URL || "reposhare-default-install"
-  return crypto.createHash("sha256").update(`reposhare-auth-${dbUrl}`).digest("hex")
+  if (process.env.NODE_ENV !== "production") {
+    return "reposhare-local-dev-secret-change-me"
+  }
+
+  const fallbackSeed = `${process.env.PUBLIC_URL || "reposhare"}:${process.cwd()}`
+  return crypto.createHash("sha256").update(`reposhare-auth-${fallbackSeed}`).digest("hex")
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
@@ -31,6 +33,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
 
   return {
     secret: getAuthSecret(),
+    trustHost: true,
     providers: [
       Credentials({
         name: "Admin Login",

@@ -10,6 +10,7 @@ import { formatDistanceToNow, format } from "date-fns"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 
 interface Props {
+  baseUrl: string
   userId: string
   isAppConfigured: boolean
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -23,7 +24,7 @@ interface Props {
   analyticsData: Record<string, any>[]
 }
 
-export default function ClientDashboard({ userId, isAppConfigured, installations, appSlug, repositories, shares, analyticsData }: Props) {
+export default function ClientDashboard({ baseUrl, userId, isAppConfigured, installations, appSlug, repositories, shares, analyticsData }: Props) {
   const [creating, setCreating] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<"connections" | "shares" | "analytics" | "system">("connections")
   const [searchQuery, setSearchQuery] = useState("")
@@ -65,7 +66,7 @@ export default function ClientDashboard({ userId, isAppConfigured, installations
   }
 
   const handleCopyLink = (id: string) => {
-    const link = `${window.location.origin}/share/${id}`
+    const link = `${baseUrl}/share/${id}`
     navigator.clipboard.writeText(link)
     toast.success("Data-stream copied to memory buffer")
   }

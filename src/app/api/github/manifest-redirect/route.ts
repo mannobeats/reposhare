@@ -1,10 +1,8 @@
-import { NextResponse, NextRequest } from "next/server"
-import { prisma } from "@/lib/prisma"
+import { NextResponse } from "next/server"
+import { getCanonicalBaseUrl } from "@/lib/base-url"
 
-export async function GET(req: NextRequest) {
-  const config = await prisma.systemConfig.findUnique({ where: { id: "singleton" } })
-  
-  let baseUrl = config?.publicUrl || new URL(req.url).origin
+export async function GET() {
+  let baseUrl = await getCanonicalBaseUrl()
   if (baseUrl.endsWith("/")) baseUrl = baseUrl.slice(0, -1)
   
   const isPublicUrl = baseUrl.startsWith("https://") && !baseUrl.includes("localhost") && !baseUrl.includes("127.0.0.1")

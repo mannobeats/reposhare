@@ -1,21 +1,11 @@
 import { prisma } from "@/lib/prisma"
 import { getOctokitForInstallation } from "@/lib/github"
-import { headers } from "next/headers"
 import { FolderGit2, Calendar, FileText, Download, Terminal, AlignLeft, GitBranch, Shield } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { format } from "date-fns"
-
-async function getBaseUrl() {
-  const config = await prisma.systemConfig.findUnique({ where: { id: "singleton" } })
-  if (config?.publicUrl) return config.publicUrl.replace(/\/$/, "")
-
-  const headersList = await headers()
-  const host = headersList.get("x-forwarded-host") || headersList.get("host") || "localhost:3000"
-  const proto = headersList.get("x-forwarded-proto") || "http"
-  return `${proto}://${host}`
-}
+import { getCanonicalBaseUrl } from "@/lib/base-url"
 
 export default async function SharedRepositoryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -73,7 +63,7 @@ export default async function SharedRepositoryPage({ params }: { params: Promise
   }
 
   // Generate dynamic connection string from the actual host
-  const baseUrl = await getBaseUrl()
+  const baseUrl = await getCanonicalBaseUrl()
   const cloneCmd = `git clone ${baseUrl}/share/${cleanId}.git`
 
   const formatSize = (sizeKb: number) => {

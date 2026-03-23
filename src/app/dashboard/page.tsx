@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { auth, signOut } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { getOctokitForInstallation } from "@/lib/github"
+import { getCanonicalBaseUrl } from "@/lib/base-url"
 import { Octokit } from "@octokit/rest"
 import { createAppAuth } from "@octokit/auth-app"
 import ClientDashboard from "./ClientDashboard"
@@ -84,6 +85,8 @@ async function DashboardContent() {
     _count: true,
   })
 
+  const baseUrl = await getCanonicalBaseUrl()
+
   return (
     <div className="min-h-screen bg-[#000508] text-[#5eb8ff] selection:bg-[#5eb8ff]/30 font-mono pb-20">
       <nav className="border-b border-[#5eb8ff]/40 sticky top-0 bg-[#000508] z-50">
@@ -108,6 +111,7 @@ async function DashboardContent() {
 
       <main className="max-w-7xl mx-auto px-6 py-12">
         <ClientDashboard 
+          baseUrl={baseUrl}
           userId={user.id}
           isAppConfigured={isAppConfigured}
           installations={installations} 

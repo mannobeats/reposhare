@@ -1,12 +1,7 @@
 #!/usr/bin/env bash
-# ============================================================
-# RepoShare — Interactive Installer
-# One-liner: curl -fsSL https://raw.githubusercontent.com/mannobeats/reposhare/main/install.sh | bash
-# ============================================================
 
 set -euo pipefail
 
-# ── Colors & helpers ────────────────────────────────────────
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -20,172 +15,364 @@ success() { echo -e "${GREEN}✓${NC} $1"; }
 warn()    { echo -e "${RED}▸${NC} $1"; }
 header()  { echo -e "\n${BOLD}${BLUE}═══════════════════════════════════════${NC}"; echo -e "${BOLD}${BLUE}  $1${NC}"; echo -e "${BOLD}${BLUE}═══════════════════════════════════════${NC}\n"; }
 
-# ── Preflight checks ───────────────────────────────────────
-header "RepoShare Installer v1.0.0"
+COMMAND="${1:-install}"
+DEFAULT_DIR="${REPOSHARE_DIR:-$HOME/reposhare}"
+DEFAULT_IMAGE="${REPOSHARE_IMAGE:-ghcr.io/mannobeats/reposhare:latest}"
+DEFAULT_PORT="${REPOSHARE_PORT:-3417}"
 
 check_command() {
-  if ! command -v "$1" &>/dev/null; then
+  if ! command -v "$1" >/dev/null 2>&1; then
     warn "$1 is not installed."
     return 1
   fi
+
   success "$1 found: $(command -v "$1")"
   return 0
 }
 
-MISSING_DEPS=()
+require_compose() {
+  if ! command -v docker >/dev/null 2>&1; then
+    warn "docker is required."
+    exit 1
+  fi
 
-info "Checking system requirements..."
-echo ""
+  if docker compose version >/dev/null 2>&1; then
+    COMPOSE_CMD="docker compose"
+    return 0
+  fi
 
-check_command "docker" || MISSING_DEPS+=("docker")
-check_command "docker" && {
-  if docker compose version &>/dev/null; then
-    success "Docker Compose plugin found"
-  elif command -v docker-compose &>/dev/null; then
-    success "docker-compose (standalone) found"
+  warn "Docker Compose plugin is required."
+  exit 1
+}
+
+prompt_install_dir() {
+  local prompt_label="${1:-Installation directory}"
+  read -rp "$(echo -e "${CYAN}▸${NC} ${prompt_label} [${DIM}${DEFAULT_DIR}${NC}]: ")" INSTALL_DIR
+  INSTALL_DIR="${INSTALL_DIR:-$DEFAULT_DIR}"
+}
+
+detect_local_ip() {
+  local detected_ip=""
+
+  if command -v ip >/dev/null 2>&1; then
+    detected_ip="$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {for (i = 1; i <= NF; i++) if ($i == "src") {print $(i+1); exit}}')"
+  fi
+
+  if [ -z "$detected_ip" ] && command -v hostname >/dev/null 2>&1; then
+    detected_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  fi
+
+  if [ -z "$detected_ip" ] && command -v ifconfig >/dev/null 2>&1; then
+    detected_ip="$(ifconfig 2>/dev/null | awk '/inet / && $2 != "127.0.0.1" {print $2; exit}')"
+  fi
+
+  if [ -z "$detected_ip" ]; then
+    detected_ip="localhost"
+  fi
+
+  printf '%s' "$detected_ip"
+}
+
+normalize_url() {
+  local raw="${1:-}"
+  local reverse_proxy="${2:-false}"
+
+  raw="$(printf '%s' "$raw" | tr -d '[:space:]')"
+  if [ -z "$raw" ]; then
+    return 0
+  fi
+
+  if [[ "$raw" =~ ^https?:// ]]; then
+    printf '%s' "${raw%/}"
+    return 0
+  fi
+
+  if [ "$reverse_proxy" = "true" ]; then
+    printf 'https://%s' "${raw%/}"
   else
-    warn "Docker Compose is not available"
-    MISSING_DEPS+=("docker-compose")
+    printf 'http://%s' "${raw%/}"
   fi
 }
-check_command "git" || MISSING_DEPS+=("git")
-check_command "curl" || MISSING_DEPS+=("curl")
-check_command "openssl" || MISSING_DEPS+=("openssl")
 
-echo ""
+write_compose_file() {
+  local target_dir="$1"
+  cat > "$target_dir/docker-compose.yaml" <<'EOF'
+services:
+  app:
+    image: ${REPOSHARE_IMAGE:-ghcr.io/mannobeats/reposhare:latest}
+    container_name: reposhare
+    restart: unless-stopped
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:${PORT:-3417}:3417"
+    environment:
+      NODE_ENV: production
+      PORT: 3417
+      DATABASE_URL: file:/data/reposhare.db
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      APP_SECRET: ${APP_SECRET:-}
+    volumes:
+      - ./data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3417/api/health >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+EOF
+}
 
-if [ ${#MISSING_DEPS[@]} -gt 0 ]; then
-  warn "Missing dependencies: ${MISSING_DEPS[*]}"
+write_env_file() {
+  local target_dir="$1"
+  local image="$2"
+  local port="$3"
+  local bind_address="$4"
+  local public_url="$5"
+  local app_secret="$6"
+
+  cat > "$target_dir/.env" <<EOF
+REPOSHARE_IMAGE=${image}
+PORT=${port}
+BIND_ADDRESS=${bind_address}
+PUBLIC_URL=${public_url}
+APP_SECRET=${app_secret}
+EOF
+}
+
+run_compose() {
+  local target_dir="$1"
+  shift
+  (
+    cd "$target_dir"
+    $COMPOSE_CMD "$@"
+  )
+}
+
+ensure_install_files() {
+  local target_dir="$1"
+  mkdir -p "$target_dir" "$target_dir/data" "$target_dir/backups"
+  write_compose_file "$target_dir"
+}
+
+command_install() {
+  header "RepoShare Installer"
+
+  local missing_deps=()
+
+  info "Checking system requirements..."
   echo ""
-  echo -e "${DIM}Please install the missing tools and re-run this script.${NC}"
-  echo -e "${DIM}  Docker: https://docs.docker.com/get-docker/${NC}"
-  echo -e "${DIM}  Git:    https://git-scm.com/downloads${NC}"
-  exit 1
-fi
 
-success "All dependencies satisfied!"
-echo ""
+  check_command "docker" || missing_deps+=("docker")
+  if command -v docker >/dev/null 2>&1; then
+    if docker compose version >/dev/null 2>&1; then
+      success "Docker Compose plugin found"
+    else
+      warn "Docker Compose plugin is required"
+      missing_deps+=("docker compose")
+    fi
+  fi
+  check_command "openssl" || missing_deps+=("openssl")
+  echo ""
 
-# ── Installation directory ──────────────────────────────────
-header "Configuration"
+  if [ ${#missing_deps[@]} -gt 0 ]; then
+    warn "Missing dependencies: ${missing_deps[*]}"
+    echo -e "${DIM}Please install the missing tools and re-run this script.${NC}"
+    exit 1
+  fi
 
-DEFAULT_DIR="$HOME/reposhare"
-read -rp "$(echo -e "${CYAN}▸${NC} Installation directory [${DIM}${DEFAULT_DIR}${NC}]: ")" INSTALL_DIR
-INSTALL_DIR="${INSTALL_DIR:-$DEFAULT_DIR}"
+  require_compose
 
-if [ -d "$INSTALL_DIR" ] && [ -f "$INSTALL_DIR/docker-compose.yaml" ]; then
-  warn "Existing RepoShare installation detected at $INSTALL_DIR"
-  read -rp "$(echo -e "${CYAN}▸${NC} Overwrite? (y/N): ")" OVERWRITE
-  if [[ ! "$OVERWRITE" =~ ^[Yy]$ ]]; then
-    info "Aborting. Your existing installation is untouched."
+  header "Configuration"
+  prompt_install_dir
+
+  local port
+  read -rp "$(echo -e "${CYAN}▸${NC} RepoShare port [${DIM}${DEFAULT_PORT}${NC}]: ")" port
+  port="${port:-$DEFAULT_PORT}"
+
+  echo ""
+  info "If you're putting RepoShare behind your own reverse proxy on this same server,"
+  info "the installer can bind the app to localhost only."
+  local reverse_proxy_reply
+  read -rp "$(echo -e "${CYAN}▸${NC} Bind only to localhost for a reverse proxy? (y/N): ")" reverse_proxy_reply
+
+  local bind_address="0.0.0.0"
+  local reverse_proxy_mode="false"
+  if [[ "$reverse_proxy_reply" =~ ^[Yy]$ ]]; then
+    bind_address="127.0.0.1"
+    reverse_proxy_mode="true"
+  fi
+
+  local local_ip
+  local_ip="$(detect_local_ip)"
+  local default_public_url="http://${local_ip}:${port}"
+
+  echo ""
+  info "Enter the public URL or domain RepoShare should use for share links and GitHub callbacks."
+  info "Examples: share.example.com, https://share.example.com, http://192.168.1.50:${port}"
+  info "Leave blank to auto-detect a local URL."
+  local public_url_input
+  read -rp "$(echo -e "${CYAN}▸${NC} Public URL [${DIM}${default_public_url}${NC}]: ")" public_url_input
+
+  local public_url
+  public_url="$(normalize_url "${public_url_input:-}" "$reverse_proxy_mode")"
+  public_url="${public_url:-$default_public_url}"
+
+  local app_secret
+  app_secret="$(openssl rand -base64 48 | tr -d '\n')"
+
+  if [ -d "$INSTALL_DIR" ] && [ -f "$INSTALL_DIR/docker-compose.yaml" ]; then
+    warn "Existing RepoShare installation detected at $INSTALL_DIR"
+    local replace_reply
+    read -rp "$(echo -e "${CYAN}▸${NC} Replace install files and keep existing data/config? (Y/n): ")" replace_reply
+    if [[ "$replace_reply" =~ ^[Nn]$ ]]; then
+      info "Aborting. Existing installation left untouched."
+      exit 0
+    fi
+  fi
+
+  header "Installing RepoShare"
+  ensure_install_files "$INSTALL_DIR"
+
+  if [ ! -f "$INSTALL_DIR/.env" ]; then
+    info "Writing configuration..."
+    write_env_file "$INSTALL_DIR" "$DEFAULT_IMAGE" "$port" "$bind_address" "$public_url" "$app_secret"
+  else
+    info "Keeping existing .env configuration."
+  fi
+
+  info "Pulling image..."
+  run_compose "$INSTALL_DIR" pull
+
+  info "Starting RepoShare..."
+  run_compose "$INSTALL_DIR" up -d
+
+  success "RepoShare is installed and starting up."
+  echo ""
+  echo -e "${GREEN}Public URL:${NC} ${BOLD}${public_url}${NC}"
+  echo -e "${GREEN}Bind address:${NC} ${bind_address}"
+  echo -e "${GREEN}Image:${NC} ${DEFAULT_IMAGE}"
+  echo -e "${GREEN}Config file:${NC} ${INSTALL_DIR}/.env"
+  echo ""
+  echo -e "${DIM}Useful commands:${NC}"
+  echo -e "  ${CYAN}bash install.sh update${NC}"
+  echo -e "  ${CYAN}bash install.sh backup${NC}"
+  echo -e "  ${CYAN}bash install.sh status${NC}"
+  echo -e "  ${CYAN}cd ${INSTALL_DIR} && ${COMPOSE_CMD} logs -f${NC}"
+  echo ""
+
+  if [ "$reverse_proxy_mode" = "true" ]; then
+    echo -e "${DIM}Reverse proxy reminder:${NC} Proxy to http://127.0.0.1:${port} and forward Host + X-Forwarded-* headers."
+  fi
+}
+
+command_update() {
+  header "RepoShare Update"
+  require_compose
+  prompt_install_dir "Existing RepoShare directory"
+
+  if [ ! -f "$INSTALL_DIR/docker-compose.yaml" ]; then
+    warn "No RepoShare installation found at $INSTALL_DIR"
+    exit 1
+  fi
+
+  ensure_install_files "$INSTALL_DIR"
+  info "Pulling the latest RepoShare image..."
+  run_compose "$INSTALL_DIR" pull
+  info "Restarting RepoShare..."
+  run_compose "$INSTALL_DIR" up -d
+  success "RepoShare has been updated."
+}
+
+command_backup() {
+  header "RepoShare Backup"
+  require_compose
+  prompt_install_dir "Existing RepoShare directory"
+
+  if [ ! -f "$INSTALL_DIR/docker-compose.yaml" ]; then
+    warn "No RepoShare installation found at $INSTALL_DIR"
+    exit 1
+  fi
+
+  mkdir -p "$INSTALL_DIR/backups"
+  local backup_path="$INSTALL_DIR/backups/reposhare-backup-$(date +%Y%m%d-%H%M%S).tar.gz"
+
+  info "Creating backup archive..."
+  tar -czf "$backup_path" -C "$INSTALL_DIR" .env data docker-compose.yaml
+  success "Backup created at $backup_path"
+}
+
+command_restore() {
+  header "RepoShare Restore"
+  require_compose
+  prompt_install_dir "Existing RepoShare directory"
+
+  if [ ! -f "$INSTALL_DIR/docker-compose.yaml" ]; then
+    warn "No RepoShare installation found at $INSTALL_DIR"
+    exit 1
+  fi
+
+  local backup_path="${2:-}"
+  if [ -z "$backup_path" ]; then
+    read -rp "$(echo -e "${CYAN}▸${NC} Backup archive path: ")" backup_path
+  fi
+
+  if [ ! -f "$backup_path" ]; then
+    warn "Backup archive not found: $backup_path"
+    exit 1
+  fi
+
+  warn "This will replace the current install files, .env, and ./data contents."
+  local confirm_restore
+  read -rp "$(echo -e "${CYAN}▸${NC} Continue with restore? (y/N): ")" confirm_restore
+  if [[ ! "$confirm_restore" =~ ^[Yy]$ ]]; then
+    info "Restore cancelled."
     exit 0
   fi
-fi
 
-# ── Port configuration ──────────────────────────────────────
-read -rp "$(echo -e "${CYAN}▸${NC} Port to expose RepoShare on [${DIM}3000${NC}]: ")" PORT
-PORT="${PORT:-3000}"
-
-# ── Public URL (optional) ───────────────────────────────────
-echo ""
-info "If you have a domain pointing to this server (e.g. https://share.example.com),"
-info "enter it below. Leave blank for localhost access only."
-echo ""
-read -rp "$(echo -e "${CYAN}▸${NC} Public URL [${DIM}http://localhost:${PORT}${NC}]: ")" PUBLIC_URL
-PUBLIC_URL="${PUBLIC_URL:-http://localhost:${PORT}}"
-
-# ── Generate secrets ────────────────────────────────────────
-NEXTAUTH_SECRET=$(openssl rand -base64 32)
-POSTGRES_PASSWORD=$(openssl rand -base64 24 | tr -dc 'a-zA-Z0-9' | head -c 32)
-
-echo ""
-header "Installing RepoShare"
-
-# ── Clone repository ────────────────────────────────────────
-info "Downloading RepoShare..."
-if [ -d "$INSTALL_DIR/.git" ]; then
-  cd "$INSTALL_DIR"
-  git pull --quiet origin main 2>/dev/null || true
-else
-  git clone --quiet --depth 1 https://github.com/mannobeats/reposhare.git "$INSTALL_DIR"
-  cd "$INSTALL_DIR"
-fi
-success "Source code ready"
-
-# ── Create .env file ────────────────────────────────────────
-info "Generating configuration..."
-
-cat > "$INSTALL_DIR/.env" <<EOF
-# ============================================================
-# RepoShare Environment Configuration
-# Generated on $(date -u +"%Y-%m-%dT%H:%M:%SZ")
-# ============================================================
-
-# Database
-POSTGRES_USER=reposhare
-POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-POSTGRES_DB=reposhare
-
-# Application
-DATABASE_URL=postgresql://reposhare:${POSTGRES_PASSWORD}@db:5432/reposhare
-NEXTAUTH_URL=${PUBLIC_URL}
-NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
-PUBLIC_URL=${PUBLIC_URL}
-PORT=${PORT}
-EOF
-
-success "Environment file created"
-
-# ── Build & Start ───────────────────────────────────────────
-info "Building Docker images (this may take a few minutes)..."
-echo ""
-
-if docker compose version &>/dev/null; then
-  COMPOSE_CMD="docker compose"
-else
-  COMPOSE_CMD="docker-compose"
-fi
-
-$COMPOSE_CMD build --quiet 2>&1 | while IFS= read -r line; do
-  echo -e "  ${DIM}${line}${NC}"
-done
-
-success "Docker images built"
-
-info "Starting services..."
-$COMPOSE_CMD up -d
-
-# Wait for health
-info "Waiting for database to be ready..."
-sleep 5
-
-# Run migrations
-info "Applying database migrations..."
-$COMPOSE_CMD exec -T app npx prisma migrate deploy 2>/dev/null || {
-  warn "Migrations not yet created — running db push instead..."
-  $COMPOSE_CMD exec -T app npx prisma db push 2>/dev/null || true
+  mkdir -p "$INSTALL_DIR"
+  tar -xzf "$backup_path" -C "$INSTALL_DIR"
+  info "Restarting RepoShare..."
+  run_compose "$INSTALL_DIR" up -d
+  success "Restore completed."
 }
 
-success "Database schema applied"
+command_status() {
+  header "RepoShare Status"
+  require_compose
+  prompt_install_dir "Existing RepoShare directory"
 
-echo ""
-header "Installation Complete! 🎉"
+  if [ ! -f "$INSTALL_DIR/docker-compose.yaml" ]; then
+    warn "No RepoShare installation found at $INSTALL_DIR"
+    exit 1
+  fi
 
-echo -e "${GREEN}RepoShare is running at:${NC} ${BOLD}${PUBLIC_URL}${NC}"
-echo ""
-echo -e "${DIM}Next steps:${NC}"
-echo -e "  1. Open ${BOLD}${PUBLIC_URL}${NC} in your browser"
-echo -e "  2. Create your admin account on the setup page"
-echo -e "  3. Connect your GitHub App"
-echo -e "  4. Start sharing repositories!"
-echo ""
-echo -e "${DIM}Useful commands:${NC}"
-echo -e "  ${CYAN}cd ${INSTALL_DIR}${NC}"
-echo -e "  ${CYAN}${COMPOSE_CMD} logs -f${NC}        ${DIM}# View logs${NC}"
-echo -e "  ${CYAN}${COMPOSE_CMD} down${NC}            ${DIM}# Stop services${NC}"
-echo -e "  ${CYAN}${COMPOSE_CMD} up -d${NC}            ${DIM}# Start services${NC}"
-echo -e "  ${CYAN}${COMPOSE_CMD} pull && ${COMPOSE_CMD} up -d --build${NC}  ${DIM}# Update${NC}"
-echo ""
-echo -e "${DIM}Installation directory: ${INSTALL_DIR}${NC}"
-echo -e "${DIM}Configuration file:     ${INSTALL_DIR}/.env${NC}"
-echo ""
+  if [ -f "$INSTALL_DIR/.env" ]; then
+    info "Current configuration:"
+    grep -E '^(REPOSHARE_IMAGE|PUBLIC_URL|PORT|BIND_ADDRESS)=' "$INSTALL_DIR/.env" || true
+    echo ""
+  fi
+
+  run_compose "$INSTALL_DIR" ps
+}
+
+case "$COMMAND" in
+  install)
+    command_install
+    ;;
+  update)
+    command_update
+    ;;
+  backup)
+    command_backup
+    ;;
+  restore)
+    command_restore "$@"
+    ;;
+  status)
+    command_status
+    ;;
+  *)
+    warn "Unknown command: $COMMAND"
+    echo "Usage: bash install.sh [install|update|backup|restore|status]"
+    exit 1
+    ;;
+esac
