@@ -13,11 +13,20 @@ export async function setupPlatform(formData: FormData) {
 
   const email = formData.get("email") as string
   const password = formData.get("password") as string
+  const confirmPassword = formData.get("confirmPassword") as string
   const publicUrlInput = (formData.get("publicUrl") as string | null) || ""
   const publicUrl = publicUrlInput.trim() ? normalizePublicUrl(publicUrlInput) : null
 
-  if (!email || !password) {
+  if (!email || !password || !confirmPassword) {
     throw new Error("Admin credentials are required")
+  }
+
+  if (password.length < 8) {
+    throw new Error("Password must be at least 8 characters long")
+  }
+
+  if (password !== confirmPassword) {
+    throw new Error("Passwords do not match")
   }
 
   // Pre-hash password safely

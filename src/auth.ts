@@ -1,5 +1,4 @@
 import NextAuth from "next-auth"
-import GitHub from "next-auth/providers/github"
 import Credentials from "next-auth/providers/credentials"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
@@ -18,19 +17,6 @@ function getAuthSecret(): string {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
-  let clientId = "UNCONFIGURED"
-  let clientSecret = "UNCONFIGURED"
-  
-  try {
-    const config = await prisma.systemConfig.findUnique({ where: { id: "singleton" } })
-    if (config && config.appId !== "temp") {
-      clientId = config.clientId
-      clientSecret = config.clientSecret
-    }
-  } catch {
-    console.warn("Failed to load SystemConfig auth credentials.")
-  }
-
   return {
     secret: getAuthSecret(),
     trustHost: true,
@@ -52,36 +38,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
           
           return { id: user.id, email: user.email, name: user.name, image: user.image }
         }
-      }),
-      ...(clientId !== "UNCONFIGURED" ? [GitHub({ 
-        clientId, 
-        clientSecret,
-        authorization: { params: { scope: "read:user user:email read:org" } }
-      })] : [])
+      })
     ],
     callbacks: {
-      async signIn({ user, account, profile }) {
-        if (account?.provider === "credentials") return true
-        
-        if (!user.email || !profile) return false
-        
-        await prisma.user.upsert({
-          where: { email: user.email },
-          update: {
-            name: user.name,
-            image: user.image,
-            id: profile.id?.toString() || user.id
-          },
-          create: {
-            id: profile.id?.toString() || user.id || "unknown",
-            email: user.email,
-            name: user.name,
-            image: user.image,
-          }
-        })
-        
-        return true
-      },
       async session({ session, token }) {
         if (session.user && token.sub) {
           session.user.id = token.sub

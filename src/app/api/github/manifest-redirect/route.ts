@@ -12,7 +12,6 @@ export async function GET() {
     name: "RepoShare",
     url: baseUrl,
     redirect_url: `${baseUrl}/api/github/setup`,
-    callback_urls: [`${baseUrl}/api/auth/callback/github`],
     public: true, // MUST be true for users to install it on isolated unlinked accounts/orgs
     default_permissions: {
       contents: "read",

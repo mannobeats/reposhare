@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { auth, signIn } from "@/auth"
-import { Terminal, Shield } from "lucide-react"
+import { Terminal } from "lucide-react"
 import { AuthError } from "next-auth"
 
 export const dynamic = "force-dynamic"
@@ -90,16 +90,6 @@ export default async function LandingPage({
 
             <button className="w-full bg-primary text-background font-bold py-4 uppercase tracking-widest text-xs hover:bg-[#4ea0e6] transition-all scanline-button mt-4">
               Authenticate
-            </button>
-          </form>
-
-          <form action={async () => {
-            "use server"
-            await signIn("github")
-          }}>
-            <button className="flex items-center justify-center space-x-3 w-full py-4 bg-transparent border border-primary/40 text-primary hover:bg-primary hover:text-background font-bold uppercase tracking-widest text-xs transition-colors rounded-none">
-              <Shield className="w-4 h-4" />
-              <span>Sign in with GitHub</span>
             </button>
           </form>
         </div>
