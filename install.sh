@@ -19,6 +19,8 @@ COMMAND="${1:-install}"
 DEFAULT_DIR="${REPOSHARE_DIR:-$HOME/reposhare}"
 DEFAULT_IMAGE="${REPOSHARE_IMAGE:-ghcr.io/mannobeats/reposhare:latest}"
 DEFAULT_PORT="${REPOSHARE_PORT:-3417}"
+DOCKER_BIN="sudo docker"
+COMPOSE_CMD="sudo docker compose"
 
 check_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -36,8 +38,18 @@ require_compose() {
     exit 1
   fi
 
-  if docker compose version >/dev/null 2>&1; then
-    COMPOSE_CMD="docker compose"
+  if ! command -v sudo >/dev/null 2>&1; then
+    warn "sudo is required."
+    exit 1
+  fi
+
+  if [ -r /dev/tty ]; then
+    sudo -v </dev/tty
+  else
+    sudo -v
+  fi
+
+  if $COMPOSE_CMD version >/dev/null 2>&1; then
     return 0
   fi
 
@@ -180,14 +192,7 @@ command_install() {
   echo ""
 
   check_command "docker" || missing_deps+=("docker")
-  if command -v docker >/dev/null 2>&1; then
-    if docker compose version >/dev/null 2>&1; then
-      success "Docker Compose plugin found"
-    else
-      warn "Docker Compose plugin is required"
-      missing_deps+=("docker compose")
-    fi
-  fi
+  check_command "sudo" || missing_deps+=("sudo")
   check_command "openssl" || missing_deps+=("openssl")
   echo ""
 
@@ -198,6 +203,8 @@ command_install() {
   fi
 
   require_compose
+  success "Docker Compose plugin found"
+  success "Docker daemon access confirmed through sudo"
 
   header "Configuration"
   prompt_install_dir
