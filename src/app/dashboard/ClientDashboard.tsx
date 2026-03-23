@@ -96,10 +96,42 @@ export default function ClientDashboard({ baseUrl, baseUrlDetails, userId, isApp
     toast.success("Share deleted")
   }
 
-  const handleCopyLink = (id: string) => {
+  const copyText = async (value: string) => {
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value)
+      return
+    }
+
+    if (typeof document === "undefined") {
+      throw new Error("Clipboard is not available in this environment.")
+    }
+
+    const textarea = document.createElement("textarea")
+    textarea.value = value
+    textarea.setAttribute("readonly", "true")
+    textarea.style.position = "fixed"
+    textarea.style.opacity = "0"
+    textarea.style.pointerEvents = "none"
+    document.body.appendChild(textarea)
+    textarea.focus()
+    textarea.select()
+
+    const copied = document.execCommand("copy")
+    document.body.removeChild(textarea)
+
+    if (!copied) {
+      throw new Error("Clipboard copy command was rejected.")
+    }
+  }
+
+  const handleCopyLink = async (id: string) => {
     const link = `${baseUrl}/share/${id}`
-    navigator.clipboard.writeText(link)
-    toast.success("Data-stream copied to memory buffer")
+    try {
+      await copyText(link)
+      toast.success("Data-stream copied to memory buffer")
+    } catch {
+      toast.error("Clipboard access failed. Copy the share URL manually.")
+    }
   }
 
   const tabs = [
