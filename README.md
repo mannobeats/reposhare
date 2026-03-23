@@ -21,6 +21,14 @@ The installer:
 
 When it finishes, open the printed URL and complete setup in the browser.
 
+### Uninstall
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mannobeats/reposhare/main/uninstall.sh | bash
+```
+
+The uninstaller stops RepoShare, removes the container, and asks whether to also delete the stored data and config.
+
 ### Docker Compose
 
 ```bash
@@ -121,6 +129,7 @@ bash install.sh update
 bash install.sh backup
 bash install.sh restore /path/to/backup.tar.gz
 bash install.sh status
+curl -fsSL https://raw.githubusercontent.com/mannobeats/reposhare/main/uninstall.sh | bash
 ```
 
 RepoShare stores persistent state in:

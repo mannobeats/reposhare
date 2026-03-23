@@ -80,7 +80,38 @@ jobs:
             type=ref,event=tag
             type=sha,format=short
 
-      - name: Build and optionally push image
+      - name: Build smoke-test image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          push: false
+          tags: reposhare:smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test image
+        run: |
+          docker run --rm --entrypoint node reposhare:smoke -e "const Database=require('better-sqlite3'); const db=new Database(':memory:'); db.exec('select 1'); console.log('better-sqlite3 ok')"
+
+      - name: Boot smoke-test container
+        run: |
+          docker run -d --name reposhare-smoke \
+            -e APP_SECRET=test-build-secret-test-build-secret \
+            -e PUBLIC_URL=http://127.0.0.1:3417 \
+            -p 3417:3417 \
+            reposhare:smoke
+          trap 'docker logs reposhare-smoke; docker rm -f reposhare-smoke >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:3417/api/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "RepoShare container did not become healthy in time."
+          exit 1
+
+      - name: Build and optionally push release image
         uses: docker/build-push-action@v6
         with:
           context: .
