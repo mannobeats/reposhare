@@ -2,8 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { getOctokitForInstallation } from "@/lib/github"
 import { FolderGit2, Calendar, FileText, Download, Terminal, AlignLeft, GitBranch, Shield, Lock } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
+import GitHubMarkdown from "@/components/GitHubMarkdown"
 import { format } from "date-fns"
 import { getCanonicalBaseUrl } from "@/lib/base-url"
 import { buildShareClonePath, getShareRepoName, unlockBrowserShareAccess, verifyShareBrowserAccess } from "@/lib/share-access"
@@ -15,7 +14,7 @@ type PageProps = {
 }
 
 export default async function SharedRepositoryPage({ params, searchParams }: PageProps) {
-  const { id, repo: _repo } = await params
+  const { id } = await params
   const resolvedSearchParams = await searchParams
   const cleanId = id.replace(/\.git$/, "")
 
@@ -239,10 +238,8 @@ export default async function SharedRepositoryPage({ params, searchParams }: Pag
         )}
 
         {readme ? (
-          <article className="prose prose-invert prose-p:text-primary prose-a:text-primary prose-strong:text-primary max-w-none bg-background p-8 border border-primary/40 text-sm font-sans tracking-wide">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {readme}
-            </ReactMarkdown>
+          <article className="bg-background p-8 border border-primary/40">
+            <GitHubMarkdown content={readme} />
           </article>
         ) : (
           <div className="text-center p-12 bg-background border border-primary/40 border-dashed">

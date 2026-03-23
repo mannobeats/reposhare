@@ -47,7 +47,7 @@ async function DashboardContent({ searchParams }: DashboardPageProps) {
       const appData = await appOctokit.rest.apps.getAuthenticated()
       appSlug = appData.data?.slug || ""
       
-      const { data: instData } = await appOctokit.rest.apps.listInstallations()
+      const instData = await appOctokit.paginate(appOctokit.rest.apps.listInstallations, { per_page: 100 })
       installations = instData.map(i => ({
         id: i.id,
         accountName: i.account?.login || "Unknown",
@@ -58,12 +58,16 @@ async function DashboardContent({ searchParams }: DashboardPageProps) {
       for (const inst of instData) {
         try {
           const octokit = await getOctokitForInstallation(inst.id)
-          const { data } = await octokit.rest.apps.listReposAccessibleToInstallation()
-          
-          const enhancedRepos = data.repositories.map(r => ({ 
-            ...r, 
-            installation_id: inst.id, 
-            account_login: inst.account?.login 
+          const allRepos = await octokit.paginate(
+            octokit.rest.apps.listReposAccessibleToInstallation,
+            { per_page: 100 },
+            (response) => response.data
+          )
+
+          const enhancedRepos = allRepos.map(r => ({
+            ...r,
+            installation_id: inst.id,
+            account_login: inst.account?.login
           }))
           repos = [...repos, ...enhancedRepos]
         } catch (subErr) {
