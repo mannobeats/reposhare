@@ -20,7 +20,6 @@ async function DashboardContent() {
 
   const user = await prisma.user.findUnique({ where: { email: session.user.email } })
   if (!user) {
-    await signOut()
     redirect("/")
   }
 

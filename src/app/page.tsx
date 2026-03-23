@@ -17,12 +17,21 @@ export default async function LandingPage({
   }
 
   const session = await auth()
-  if (session?.user) {
+  const sessionUser = session?.user?.email
+    ? await prisma.user.findUnique({ where: { email: session.user.email } })
+    : null
+
+  if (session?.user && sessionUser) {
     redirect("/dashboard")
   }
 
   const params = await searchParams
-  const loginError = params.error === "credentials" ? "Invalid email or password." : null
+  const loginError =
+    params.error === "credentials"
+      ? "Invalid email or password."
+      : session?.user && !sessionUser
+        ? "Your previous session is no longer valid. Please sign in again."
+        : null
 
   return (
     <div className="min-h-screen relative flex flex-col items-center justify-center p-4 screen-scanline">

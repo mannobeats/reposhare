@@ -8,6 +8,7 @@ import { createShareLink, toggleShareActive, deleteShare, flushProxies, purgeGit
 import { toast } from "sonner"
 import { formatDistanceToNow, format } from "date-fns"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
+import type { ActionResult } from "./actions"
 
 interface Props {
   baseUrl: string
@@ -29,7 +30,7 @@ export default function ClientDashboard({ baseUrl, userId, isAppConfigured, inst
   const [activeTab, setActiveTab] = useState<"connections" | "shares" | "analytics" | "system">("connections")
   const [searchQuery, setSearchQuery] = useState("")
 
-  const [modalState, setModalState] = useState<{ isOpen: boolean, actionFn: (() => Promise<void>) | null, warningText: string, successMessage: string }>({
+  const [modalState, setModalState] = useState<{ isOpen: boolean, actionFn: (() => Promise<ActionResult>) | null, warningText: string, successMessage: string }>({
     isOpen: false,
     actionFn: null,
     warningText: "",
@@ -56,13 +57,35 @@ export default function ClientDashboard({ baseUrl, userId, isAppConfigured, inst
   const handleShare = async (repoName: string, installationId: string) => {
     try {
       setCreating(repoName)
-      await createShareLink(repoName, installationId, 7)
+      const result = await createShareLink(repoName, installationId, 7)
+      if (!result.ok) {
+        toast.error(result.error)
+        return
+      }
+
       toast.success("Repository matrix link established")
     } catch {
-      toast.error("Fatal proxy routing error")
+      toast.error("Failed to create the share link")
     } finally {
       setCreating(null)
     }
+  }
+
+  const handleToggleShare = async (id: string, active: boolean) => {
+    const result = await toggleShareActive(id, active)
+    if (!result.ok) {
+      toast.error(result.error)
+    }
+  }
+
+  const handleDeleteShare = async (id: string) => {
+    const result = await deleteShare(id)
+    if (!result.ok) {
+      toast.error(result.error)
+      return
+    }
+
+    toast.success("Share deleted")
   }
 
   const handleCopyLink = (id: string) => {
@@ -78,23 +101,29 @@ export default function ClientDashboard({ baseUrl, userId, isAppConfigured, inst
     { id: "system", label: "SYSTEM_DIAGNOSTICS", icon: Settings },
   ] as const
 
-  const promptDestructiveAction = (actionFn: () => Promise<void>, warningText: string, successMessage: string) => {
+  const promptDestructiveAction = (actionFn: () => Promise<ActionResult>, warningText: string, successMessage: string) => {
     setModalState({ isOpen: true, actionFn, warningText, successMessage })
   }
 
   const confirmAction = async () => {
     if (modalState.actionFn) {
       try {
-        await modalState.actionFn()
+        const result = await modalState.actionFn()
+        if (!result.ok) {
+          toast.error(result.error)
+          return
+        }
+
         toast.success(modalState.successMessage)
-        if (modalState.actionFn === terminateAccount) {
-          window.location.href = "/"
+        if (result.redirectTo) {
+          window.location.href = result.redirectTo
         }
       } catch {
         toast.error("Execution failed: Authorization required or system locked")
+      } finally {
+        setModalState((current) => ({ ...current, isOpen: false }))
       }
     }
-    setModalState({ ...modalState, isOpen: false })
   }
 
   return (
@@ -274,10 +303,10 @@ export default function ClientDashboard({ baseUrl, userId, isAppConfigured, inst
                         <Button variant="outline" size="sm" onClick={() => handleCopyLink(share.id)} className="h-9 rounded-none border-[#5eb8ff]/50 text-[#5eb8ff] bg-transparent hover:bg-[#5eb8ff] hover:text-[#000508] font-bold uppercase text-[10px] tracking-widest">
                           <Copy className="w-3 h-3 mr-2" /> BUFFER URI
                         </Button>
-                        <Button variant="outline" size="icon" onClick={() => toggleShareActive(share.id, !share.active)} className={`h-9 w-9 rounded-none border-[#5eb8ff]/50 bg-transparent ${share.active ? "text-[#5eb8ff] hover:bg-[#5eb8ff] hover:text-[#000508]" : "text-[#5eb8ff]/40 hover:text-[#5eb8ff]"}`}>
+                        <Button variant="outline" size="icon" onClick={() => handleToggleShare(share.id, !share.active)} className={`h-9 w-9 rounded-none border-[#5eb8ff]/50 bg-transparent ${share.active ? "text-[#5eb8ff] hover:bg-[#5eb8ff] hover:text-[#000508]" : "text-[#5eb8ff]/40 hover:text-[#5eb8ff]"}`}>
                           {share.active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                         </Button>
-                        <Button variant="outline" size="icon" onClick={() => deleteShare(share.id)} className="h-9 w-9 rounded-none border-[#5eb8ff]/50 text-[#5eb8ff]/50 bg-transparent hover:bg-[#5eb8ff] hover:text-[#000508]">
+                        <Button variant="outline" size="icon" onClick={() => handleDeleteShare(share.id)} className="h-9 w-9 rounded-none border-[#5eb8ff]/50 text-[#5eb8ff]/50 bg-transparent hover:bg-[#5eb8ff] hover:text-[#000508]">
                           <Trash className="w-4 h-4" />
                         </Button>
                       </div>
