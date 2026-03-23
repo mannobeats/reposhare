@@ -14,28 +14,37 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return new NextResponse("Repository not found or link expired", { status: 404 })
   }
 
-  if (!(share as any).installationId) {
+  if (!share.installationId) {
     return new NextResponse("Server configuration error", { status: 500 })
   }
 
   prisma.analyticEvent.create({
-    data: { shareId: share.id, type: "GIT_CLONE_UPLOAD", ipHash: "anonymized_via_edge" }
-  }).catch(() => {})
+    data: { shareId: share.id, type: "GIT_CLONE_UPLOAD", ipHash: "anonymized" }
+  }).catch(console.error)
 
-  const token = await getInstallationToken((share as any).installationId)
+  const token = await getInstallationToken(share.installationId)
   const gitUrl = `https://github.com/${share.repoFullName}.git/git-upload-pack`
 
   const bodyBuffer = Buffer.from(await req.arrayBuffer())
 
   // Forward the binary payload pack request from the Git client directly to GitHub
+  // Critical: we MUST forward Git-Protocol header for protocol version consistency
+  const headers: Record<string, string> = {
+    "Authorization": `Basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`,
+    "Content-Type": req.headers.get("content-type") || "application/x-git-upload-pack-request",
+    "Accept": req.headers.get("accept") || "application/x-git-upload-pack-result",
+    "User-Agent": "RepoShare Proxy",
+  }
+
+  // Forward Git-Protocol header to maintain protocol version consistency with info/refs
+  const gitProtocol = req.headers.get("git-protocol")
+  if (gitProtocol) {
+    headers["Git-Protocol"] = gitProtocol
+  }
+
   const gitResponse = await fetch(gitUrl, {
     method: "POST",
-    headers: {
-      "Authorization": `Basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`,
-      "Content-Type": req.headers.get("content-type") || "application/x-git-upload-pack-request",
-      "Accept": req.headers.get("accept") || "application/x-git-upload-pack-result",
-      "User-Agent": "RepoShare Proxy",
-    },
+    headers,
     body: bodyBuffer,
   })
 

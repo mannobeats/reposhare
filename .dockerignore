@@ -1,0 +1,29 @@
+# Deps
+node_modules
+.next
+.git
+
+# Docker
+Dockerfile
+docker-compose.yaml
+.dockerignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Env (provided at runtime)
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Artifacts
+*.md
+!README.md
+LICENSE

@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { Github, Plus, Lock, Globe, Loader2, Link2, Copy, Trash, Pause, Play, Activity, Terminal, Database, ShieldAlert, Cpu, Settings, User, LogOut, Search } from "lucide-react"
+import { Github, Lock, Globe, Loader2, Link2, Copy, Trash, Pause, Play, Activity, Terminal, Database, ShieldAlert, Cpu, Settings, User, Search } from "lucide-react"
 import { createShareLink, toggleShareActive, deleteShare, flushProxies, purgeGitHubToken, terminateAccount } from "./actions"
 import { toast } from "sonner"
 import { formatDistanceToNow, format } from "date-fns"
@@ -12,11 +12,15 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 interface Props {
   userId: string
   isAppConfigured: boolean
-  installations: any[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  installations: Record<string, any>[]
   appSlug: string
-  repositories: any[]
-  shares: any[]
-  analyticsData: any[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  repositories: Record<string, any>[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  shares: Record<string, any>[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  analyticsData: Record<string, any>[]
 }
 
 export default function ClientDashboard({ userId, isAppConfigured, installations, appSlug, repositories, shares, analyticsData }: Props) {
@@ -85,7 +89,7 @@ export default function ClientDashboard({ userId, isAppConfigured, installations
         if (modalState.actionFn === terminateAccount) {
           window.location.href = "/"
         }
-      } catch (e) {
+      } catch {
         toast.error("Execution failed: Authorization required or system locked")
       }
     }
@@ -203,6 +207,7 @@ export default function ClientDashboard({ userId, isAppConfigured, installations
                               <div key={inst.id} className="flex items-center justify-between p-3 border border-[#5eb8ff]/40 bg-[#5eb8ff]/5">
                                 <div className="flex items-center space-x-3">
                                   {inst.avatar ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
                                     <img src={inst.avatar} alt="org" className="w-8 h-8 border border-[#5eb8ff]/60" style={{ filter: 'sepia(100%) hue-rotate(180deg) saturate(300%) opacity(0.8)' }} />
                                   ) : (
                                     <div className="w-8 h-8 border border-[#5eb8ff]/60 flex justify-center items-center"><Github className="w-4 h-4 text-[#5eb8ff]" /></div>

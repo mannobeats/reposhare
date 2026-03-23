@@ -4,7 +4,7 @@ import { prisma } from "./prisma"
 
 export async function getGitHubAppConfig() {
   const config = await prisma.systemConfig.findUnique({ where: { id: "singleton" } })
-  if (!config) throw new Error("GitShare App is not configured. Please run setup.")
+  if (!config) throw new Error("RepoShare App is not configured. Please run setup.")
   return config
 }
 

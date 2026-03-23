@@ -19,9 +19,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return new NextResponse("Repository not found or link expired", { status: 404 })
   }
 
-  // Auth checking for password protections can be implemented via Git Basic Auth headers here if needed.
-
-  if (!(share as any).installationId) {
+  if (!share.installationId) {
     return new NextResponse("Server configuration error", { status: 500 })
   }
 
@@ -30,11 +28,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     data: {
       shareId: share.id,
       type: "GIT_CLONE_REFS",
-      ipHash: "anonymized_via_edge", 
+      ipHash: "anonymized",
     }
-  }).catch(() => {})
+  }).catch(console.error)
 
-  const token = await getInstallationToken((share as any).installationId)
+  const token = await getInstallationToken(share.installationId)
   const gitUrl = `https://github.com/${share.repoFullName}.git/info/refs?service=${service}`
 
   // Proxy the request securely to GitHub

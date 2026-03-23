@@ -4,12 +4,18 @@ import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { auth } from "@/auth"
 
-export async function createShareLink(repoFullName: string, installationId: string, expireDays?: number) {
+async function requireUser() {
   const session = await auth()
-  if (!session?.user?.id) throw new Error("Unauthorized")
-
-  const user = await prisma.user.findUnique({ where: { email: session.user.email! } })
+  if (!session?.user?.email) throw new Error("Unauthorized")
+  
+  const user = await prisma.user.findUnique({ where: { email: session.user.email } })
   if (!user) throw new Error("User not found")
+  
+  return user
+}
+
+export async function createShareLink(repoFullName: string, installationId: string, expireDays?: number) {
+  const user = await requireUser()
 
   const expiresAt = expireDays ? new Date(Date.now() + expireDays * 24 * 60 * 60 * 1000) : null
 
@@ -26,31 +32,37 @@ export async function createShareLink(repoFullName: string, installationId: stri
 }
 
 export async function toggleShareActive(id: string, active: boolean) {
+  const user = await requireUser()
+  
+  // Verify the share belongs to this user
+  const share = await prisma.share.findUnique({ where: { id } })
+  if (!share || share.userId !== user.id) throw new Error("Unauthorized")
+  
   await prisma.share.update({ where: { id }, data: { active } })
   revalidatePath("/dashboard")
 }
 
 export async function deleteShare(id: string) {
+  const user = await requireUser()
+  
+  // Verify the share belongs to this user
+  const share = await prisma.share.findUnique({ where: { id } })
+  if (!share || share.userId !== user.id) throw new Error("Unauthorized")
+  
   await prisma.share.delete({ where: { id } })
   revalidatePath("/dashboard")
 }
 
 export async function flushProxies() {
-  const session = await auth()
-  if (!session?.user?.email) throw new Error("Unauthorized")
-  
-  const user = await prisma.user.findUnique({ where: { email: session.user.email } })
-  if (!user) throw new Error("User not found")
-
+  const user = await requireUser()
   await prisma.share.deleteMany({ where: { userId: user.id } })
   revalidatePath("/dashboard")
 }
 
 export async function purgeGitHubToken() {
-  const session = await auth()
-  if (!session?.user?.id) throw new Error("Unauthorized")
+  const user = await requireUser()
+  if (user.role !== "ADMIN") throw new Error("Unauthorized: Admin access required")
 
-  // Reset SystemConfig strictly to unconfigured state
   await prisma.systemConfig.update({
     where: { id: "singleton" },
     data: {
@@ -62,7 +74,6 @@ export async function purgeGitHubToken() {
     }
   })
   
-  // Wipe internal installation mapping
   await prisma.user.updateMany({
     data: { installationId: null }
   })
@@ -71,9 +82,9 @@ export async function purgeGitHubToken() {
 }
 
 export async function terminateAccount() {
-  const session = await auth()
-  if (!session?.user?.id) throw new Error("Unauthorized")
+  const user = await requireUser()
   
-  await prisma.user.delete({ where: { id: session.user.id } })
-  // Wiping the account forces a standard logout natively upon next middleware check
+  // Delete all shares first (cascade should handle this, but be explicit)
+  await prisma.share.deleteMany({ where: { userId: user.id } })
+  await prisma.user.delete({ where: { id: user.id } })
 }

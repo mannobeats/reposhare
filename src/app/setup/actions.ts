@@ -4,6 +4,12 @@ import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 
 export async function setupPlatform(formData: FormData) {
+  // Guard: do not allow re-initialization once an admin exists
+  const existingAdmin = await prisma.user.findFirst({ where: { role: "ADMIN" } })
+  if (existingAdmin) {
+    throw new Error("Platform is already initialized. Cannot re-run setup.")
+  }
+
   const email = formData.get("email") as string
   const password = formData.get("password") as string
   const publicUrl = formData.get("publicUrl") as string | null

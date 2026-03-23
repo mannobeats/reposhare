@@ -1,11 +1,21 @@
 import { prisma } from "@/lib/prisma"
-import { notFound } from "next/navigation"
 import { getOctokitForInstallation } from "@/lib/github"
-import { Github, FolderGit2, Calendar, FileText, Download, Terminal, AlignLeft } from "lucide-react"
+import { headers } from "next/headers"
+import { FolderGit2, Calendar, FileText, Download, Terminal, AlignLeft, GitBranch, Shield } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { format } from "date-fns"
+
+async function getBaseUrl() {
+  const config = await prisma.systemConfig.findUnique({ where: { id: "singleton" } })
+  if (config?.publicUrl) return config.publicUrl.replace(/\/$/, "")
+
+  const headersList = await headers()
+  const host = headersList.get("x-forwarded-host") || headersList.get("host") || "localhost:3000"
+  const proto = headersList.get("x-forwarded-proto") || "http"
+  return `${proto}://${host}`
+}
 
 export default async function SharedRepositoryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -21,7 +31,7 @@ export default async function SharedRepositoryPage({ params }: { params: Promise
       <div className="flex items-center justify-center min-h-screen text-primary p-6">
         <div className="border border-red-500 bg-red-500/10 p-6 max-w-lg w-full">
            <span className="text-red-500 font-bold uppercase tracking-widest text-sm mb-2 block">&gt; FATAL ERROR: 404</span>
-           <span className="text-red-500/70 text-xs uppercase tracking-widest block">The requested repository matrix could not be resolved. It may have expired or been purged.</span>
+           <span className="text-red-500/70 text-xs uppercase tracking-widest block">The requested repository could not be resolved. It may have expired or been purged.</span>
         </div>
       </div>
     )
@@ -29,25 +39,26 @@ export default async function SharedRepositoryPage({ params }: { params: Promise
 
   // Increment view counter analytics
   prisma.analyticEvent.create({
-    data: { shareId: share.id, type: "PAGE_VIEW", ipHash: "anonymized_via_edge" }
-  }).catch(() => {})
+    data: { shareId: share.id, type: "PAGE_VIEW", ipHash: "anonymized" }
+  }).catch(console.error)
 
-  if (!(share as any).installationId) {
+  if (!share.installationId) {
     return (
       <div className="flex items-center justify-center min-h-screen text-primary p-6">
         <div className="border border-red-500 bg-red-500/10 p-6 max-w-lg w-full">
            <span className="text-red-500 font-bold uppercase tracking-widest text-sm mb-2 block">&gt; SYSTEM ERROR: 500</span>
-           <span className="text-red-500/70 text-xs uppercase tracking-widest block">Origin node installation invalid or falsy. Please regenerate the proxy tunnel.</span>
+           <span className="text-red-500/70 text-xs uppercase tracking-widest block">Origin node installation invalid. Please regenerate the proxy tunnel.</span>
         </div>
       </div>
     )
   }
 
-  const octokit = await getOctokitForInstallation((share as any).installationId)
+  const octokit = await getOctokitForInstallation(share.installationId)
   const [owner, repo] = share.repoFullName.split("/")
   
   let readme = ""
-  let repoData: any = null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let repoData: Record<string, any> | null = null
 
   try {
     const { data } = await octokit.rest.repos.get({ owner, repo })
@@ -61,9 +72,14 @@ export default async function SharedRepositoryPage({ params }: { params: Promise
     console.error("Failed fetching GitHub repo details", e)
   }
 
-  // Generate dynamic connection string
-  // If the origin proxy is not possible universally without SSR headers, we fallback to a native template string
-  const cloneCmd = `git clone ${process.env.NEXT_PUBLIC_SITE_URL || "https://reposhare.domain"}/share/${cleanId}.git`
+  // Generate dynamic connection string from the actual host
+  const baseUrl = await getBaseUrl()
+  const cloneCmd = `git clone ${baseUrl}/share/${cleanId}.git`
+
+  const formatSize = (sizeKb: number) => {
+    if (sizeKb < 1024) return `${sizeKb} KB`
+    return `${(sizeKb / 1024).toFixed(1)} MB`
+  }
 
   return (
     <div className="min-h-screen flex flex-col p-6 screen-scanline font-mono text-primary">
@@ -110,11 +126,11 @@ export default async function SharedRepositoryPage({ params }: { params: Promise
              </div>
              <div className="border border-primary/40 bg-background p-4 flex flex-col items-center justify-center space-y-2">
                <FileText className="w-4 h-4 text-primary/60" />
-               <span className="font-bold">{(repoData.size / 1024).toFixed(1)} MB</span>
+               <span className="font-bold">{formatSize(repoData.size)}</span>
                <span className="text-[10px] text-primary/50">Data Size</span>
              </div>
              <div className="border border-primary/40 bg-background p-4 flex flex-col items-center justify-center space-y-2">
-               <Github className="w-4 h-4 text-primary/60" />
+               <GitBranch className="w-4 h-4 text-primary/60" />
                <span className="font-bold">{repoData.default_branch}</span>
                <span className="text-[10px] text-primary/50">Root Branch</span>
              </div>
@@ -137,6 +153,13 @@ export default async function SharedRepositoryPage({ params }: { params: Promise
             <p className="text-primary/50 text-xs uppercase tracking-widest">&gt; NO DOCUMENTATION DATASTREAM FOUND</p>
           </div>
         )}
+
+        <footer className="mt-16 mb-8 text-center">
+          <div className="flex items-center justify-center space-x-2 text-primary/30 text-[10px] uppercase tracking-[0.3em]">
+            <Shield className="w-3 h-3" />
+            <span>Powered by RepoShare</span>
+          </div>
+        </footer>
       </main>
     </div>
   )

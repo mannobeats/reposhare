@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { auth, signIn } from "@/auth"
-import { Github, Code, Terminal, Combine } from "lucide-react"
+import { Terminal, Shield } from "lucide-react"
+
+export const dynamic = "force-dynamic"
 
 export default async function LandingPage() {
   const config = await prisma.systemConfig.findUnique({ where: { id: "singleton" } })
@@ -22,10 +24,10 @@ export default async function LandingPage() {
         <div className="mb-12 flex flex-col items-center">
           <Terminal className="w-16 h-16 text-primary mb-6 animate-pulse" />
           <h1 className="text-4xl md:text-5xl font-bold tracking-[0.2em] mb-4 text-primary uppercase text-center">
-            Welcome to Lumon
+            RepoShare
           </h1>
           <p className="text-sm text-primary/70 max-w-lg leading-relaxed uppercase tracking-widest text-center">
-            &gt; Please authenticate to access secure repositories.
+            &gt; Securely share private repositories via proxy tunnels.
           </p>
         </div>
 
@@ -37,27 +39,27 @@ export default async function LandingPage() {
             <div className="absolute top-0 left-0 w-2 h-full bg-primary" />
             
             <h2 className="text-sm font-bold text-primary mb-6 uppercase tracking-widest flex items-center">
-              Employee Login
+              Admin Login
             </h2>
             
             <div className="space-y-4">
               <div>
-                <label className="text-[10px] uppercase text-primary/60 tracking-widest block mb-2">Employee ID (Email):</label>
+                <label className="text-[10px] uppercase text-primary/60 tracking-widest block mb-2">Email:</label>
                 <input 
                   name="email" 
                   type="email" 
-                  placeholder="08-927..." 
+                  placeholder="admin@example.com" 
                   required 
                   className="w-full bg-background border border-primary/40 px-4 py-3 placeholder:text-primary/30 outline-none text-primary uppercase tracking-widest font-bold focus:border-primary transition-colors text-xs"
                 />
               </div>
               
               <div>
-                <label className="text-[10px] uppercase text-primary/60 tracking-widest block mb-2">Passcode:</label>
+                <label className="text-[10px] uppercase text-primary/60 tracking-widest block mb-2">Password:</label>
                 <input 
                   name="password" 
                   type="password" 
-                  placeholder="********" 
+                  placeholder="••••••••" 
                   required 
                   className="w-full bg-background border border-primary/40 px-4 py-3 placeholder:text-primary/30 outline-none text-primary uppercase tracking-widest font-bold focus:border-primary transition-colors text-xs"
                 />
@@ -74,15 +76,15 @@ export default async function LandingPage() {
             await signIn("github")
           }}>
             <button className="flex items-center justify-center space-x-3 w-full py-4 bg-transparent border border-primary/40 text-primary hover:bg-primary hover:text-background font-bold uppercase tracking-widest text-xs transition-colors rounded-none">
-              <Github className="w-4 h-4" />
-              <span>External Identity</span>
+              <Shield className="w-4 h-4" />
+              <span>Sign in with GitHub</span>
             </button>
           </form>
         </div>
 
         <div className="mt-20 w-full flex flex-col items-center">
            <span className="text-[10px] text-primary/40 tracking-[0.3em] uppercase block mb-2">SYSTEM STATUS: ONLINE</span>
-           <span className="text-[10px] text-primary/40 tracking-[0.3em] uppercase">VER: 2.1.0_PROX</span>
+           <span className="text-[10px] text-primary/40 tracking-[0.3em] uppercase">RepoShare v1.0.0</span>
         </div>
       </main>
     </div>

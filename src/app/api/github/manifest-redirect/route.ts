@@ -9,8 +9,9 @@ export async function GET(req: NextRequest) {
   
   const isPublicUrl = baseUrl.startsWith("https://") && !baseUrl.includes("localhost") && !baseUrl.includes("127.0.0.1")
 
-  const manifest: any = {
-    name: "GitShare Hub",
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const manifest: Record<string, any> = {
+    name: "RepoShare",
     url: baseUrl,
     redirect_url: `${baseUrl}/api/github/setup`,
     callback_urls: [`${baseUrl}/api/auth/callback/github`],

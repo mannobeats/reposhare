@@ -7,6 +7,8 @@ import { createAppAuth } from "@octokit/auth-app"
 import ClientDashboard from "./ClientDashboard"
 import { LogOut, TerminalSquare } from "lucide-react"
 
+export const dynamic = "force-dynamic"
+
 export default function DashboardPage() {
   return <DashboardContent />
 }
@@ -24,9 +26,11 @@ async function DashboardContent() {
   const config = await prisma.systemConfig.findUnique({ where: { id: "singleton" } })
   const isAppConfigured = Boolean(config && config.appId !== "temp")
 
-  let repos: any[] = []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let repos: Record<string, any>[] = []
   let appSlug = ""
-  let installations: any[] = []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let installations: Record<string, any>[] = []
 
   if (isAppConfigured) {
     const appOctokit = new Octokit({
@@ -88,7 +92,7 @@ async function DashboardContent() {
             <div className="h-8 w-8 border border-[#5eb8ff] flex items-center justify-center text-[#5eb8ff]">
               <TerminalSquare className="w-4 h-4" />
             </div>
-            <span className="font-bold tracking-widest text-[#5eb8ff] text-sm uppercase">LUMON CORP<span className="opacity-50">_SYS</span></span>
+            <span className="font-bold tracking-widest text-[#5eb8ff] text-sm uppercase">REPOSHARE<span className="opacity-50">_CTRL</span></span>
           </div>
           <form action={async () => {
              "use server"

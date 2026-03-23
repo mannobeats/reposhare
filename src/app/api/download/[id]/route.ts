@@ -7,7 +7,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const share = await prisma.share.findUnique({
     where: { id, active: true },
-    include: { user: true }
   })
 
   // Same robust expiration and permission checking logic is enforced uniformly
@@ -15,12 +14,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "Link expired or disabled." }, { status: 404 })
   }
 
+  if (!share.installationId) {
+    return NextResponse.json({ error: "Installation not configured for this share." }, { status: 500 })
+  }
+
   // Record that a manual UI download was initiated
   prisma.analyticEvent.create({
-    data: { shareId: share.id, type: "WEB_DOWNLOAD", ipHash: "anonymized_via_edge" }
-  }).catch(() => {})
+    data: { shareId: share.id, type: "WEB_DOWNLOAD", ipHash: "anonymized" }
+  }).catch(console.error)
 
-  const token = await getInstallationToken(share.user.installationId!)
+  // Use the share's own installationId — not the user's, which may be null
+  const token = await getInstallationToken(share.installationId)
 
   // Tell GitHub to create a ZIP bundle of this repository
   const response = await fetch(`https://api.github.com/repos/${share.repoFullName}/zipball`, {
@@ -37,7 +41,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "Failed to assemble ZIP bundle from source." }, { status: 500 })
   }
 
-  // Stream the response back so massive repos don't consume Vercel/Node memory
+  // Stream the response back so massive repos don't consume memory
   return new NextResponse(response.body, {
     headers: {
       "Content-Type": "application/zip",

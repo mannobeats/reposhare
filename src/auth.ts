@@ -3,6 +3,17 @@ import GitHub from "next-auth/providers/github"
 import Credentials from "next-auth/providers/credentials"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
+import crypto from "crypto"
+
+// Generate a deterministic but unique secret from the database URL if NEXTAUTH_SECRET is not set
+function getAuthSecret(): string {
+  const envSecret = process.env.NEXTAUTH_SECRET
+  if (envSecret && envSecret.length >= 32) return envSecret
+
+  // Derive a secret from DATABASE_URL — unique per installation but consistent across restarts
+  const dbUrl = process.env.DATABASE_URL || "reposhare-default-install"
+  return crypto.createHash("sha256").update(`reposhare-auth-${dbUrl}`).digest("hex")
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
   let clientId = "UNCONFIGURED"
@@ -10,16 +21,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
   
   try {
     const config = await prisma.systemConfig.findUnique({ where: { id: "singleton" } })
-    if (config) {
+    if (config && config.appId !== "temp") {
       clientId = config.clientId
       clientSecret = config.clientSecret
     }
-  } catch (e) {
+  } catch {
     console.warn("Failed to load SystemConfig auth credentials.")
   }
 
   return {
-    secret: process.env.NEXTAUTH_SECRET || "super_secret_fallback_do_not_use_in_prod",
+    secret: getAuthSecret(),
     providers: [
       Credentials({
         name: "Admin Login",
@@ -33,17 +44,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
           const user = await prisma.user.findUnique({ where: { email: credentials.email as string } })
           if (!user || (!user.passwordHash)) return null
           
-          const mathPass = await bcrypt.compare(credentials.password as string, user.passwordHash)
-          if (!mathPass) return null
+          const matchPass = await bcrypt.compare(credentials.password as string, user.passwordHash)
+          if (!matchPass) return null
           
           return { id: user.id, email: user.email, name: user.name, image: user.image }
         }
       }),
-      GitHub({ 
+      ...(clientId !== "UNCONFIGURED" ? [GitHub({ 
         clientId, 
         clientSecret,
-        authorization: { params: { scope: "read:user user:email read:org" } } // minimal scope, repo scope handled by app installation
-      })
+        authorization: { params: { scope: "read:user user:email read:org" } }
+      })] : [])
     ],
     callbacks: {
       async signIn({ user, account, profile }) {
@@ -51,13 +62,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
         
         if (!user.email || !profile) return false
         
-        // Custom syncing to avoid needing full heavy NextAuth adapters
         await prisma.user.upsert({
           where: { email: user.email },
           update: {
             name: user.name,
             image: user.image,
-            // we use the github profile string ID mapping
             id: profile.id?.toString() || user.id
           },
           create: {
