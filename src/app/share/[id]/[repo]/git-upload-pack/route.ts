@@ -5,6 +5,6 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; repo: string }> },
 ) {
-  const { id } = await params
-  return resolveGitUploadPackResponse(req, id.replace(/\.git$/, ""))
+  const { id, repo } = await params
+  return resolveGitUploadPackResponse(req, id.replace(/\.git$/, ""), repo)
 }

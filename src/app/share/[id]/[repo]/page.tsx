@@ -18,7 +18,10 @@ import { getOctokitForInstallation } from "@/lib/github"
 import { prisma } from "@/lib/prisma"
 import {
   buildShareClonePath,
+  createCanonicalSharePath,
+  getServerActionClientAddress,
   getShareRepoName,
+  isExpectedShareRepoSlug,
   unlockBrowserShareAccess,
   verifyShareBrowserAccess,
 } from "@/lib/share-access"
@@ -32,7 +35,7 @@ export default async function SharedRepositoryPage({
   params,
   searchParams,
 }: PageProps) {
-  const { id } = await params
+  const { id, repo: requestedRepo } = await params
   const resolvedSearchParams = await searchParams
   const cleanId = id.replace(/\.git$/, "")
 
@@ -59,6 +62,12 @@ export default async function SharedRepositoryPage({
 
   const resolvedShare = share
   const repoName = getShareRepoName(share.repoFullName)
+  if (!isExpectedShareRepoSlug(requestedRepo, share.repoFullName)) {
+    const query = resolvedSearchParams.error
+      ? `?error=${resolvedSearchParams.error}`
+      : ""
+    redirect(`${createCanonicalSharePath(cleanId, share.repoFullName)}${query}`)
+  }
 
   const [owner, repo] = share.repoFullName.split("/")
 
@@ -70,12 +79,16 @@ export default async function SharedRepositoryPage({
       redirect(`/share/${cleanId}/${repoName}?error=invalid-password`)
     }
 
-    const unlocked = await unlockBrowserShareAccess(
-      cleanId,
-      resolvedShare.passwordHash,
+    const accessResult = await unlockBrowserShareAccess(
+      resolvedShare,
       password,
+      await getServerActionClientAddress(),
     )
-    if (!unlocked) {
+    if (!accessResult.ok) {
+      if (accessResult.reason === "rate-limited") {
+        redirect(`/share/${cleanId}/${repoName}?error=rate-limited`)
+      }
+
       redirect(`/share/${cleanId}/${repoName}?error=invalid-password`)
     }
 
@@ -110,6 +123,10 @@ export default async function SharedRepositoryPage({
           {resolvedSearchParams.error === "invalid-password" ? (
             <div className="border border-red-500/60 bg-red-500/10 px-4 py-3 text-[10px] uppercase tracking-widest text-red-400">
               &gt; Invalid password. Try again.
+            </div>
+          ) : resolvedSearchParams.error === "rate-limited" ? (
+            <div className="border border-red-500/60 bg-red-500/10 px-4 py-3 text-[10px] uppercase tracking-widest text-red-400">
+              &gt; Too many failed attempts. Try again later.
             </div>
           ) : null}
 

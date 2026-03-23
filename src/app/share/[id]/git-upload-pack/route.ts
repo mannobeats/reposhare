@@ -1,14 +1,30 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getInstallationToken } from "@/lib/github"
 import { prisma } from "@/lib/prisma"
-import { verifyShareRequestAccess } from "@/lib/share-access"
+import {
+  isExpectedShareRepoSlug,
+  verifyShareRequestAccess,
+} from "@/lib/share-access"
 
-async function resolveGitUploadPackResponse(req: NextRequest, shareId: string) {
+async function resolveGitUploadPackResponse(
+  req: NextRequest,
+  shareId: string,
+  requestedRepo?: string,
+) {
   const share = await prisma.share.findUnique({
     where: { id: shareId, active: true },
   })
 
   if (!share || (share.expiresAt && share.expiresAt < new Date())) {
+    return new NextResponse("Repository not found or link expired", {
+      status: 404,
+    })
+  }
+
+  if (
+    requestedRepo &&
+    !isExpectedShareRepoSlug(requestedRepo, share.repoFullName)
+  ) {
     return new NextResponse("Repository not found or link expired", {
       status: 404,
     })
@@ -22,6 +38,12 @@ async function resolveGitUploadPackResponse(req: NextRequest, shareId: string) {
 
   const access = await verifyShareRequestAccess(req, share)
   if (!access.ok) {
+    if (access.reason === "rate-limited") {
+      return new NextResponse("Too many failed attempts for this share", {
+        status: 429,
+      })
+    }
+
     return new NextResponse("Authentication required for this share", {
       status: 401,
       headers: { "WWW-Authenticate": 'Basic realm="RepoShare"' },

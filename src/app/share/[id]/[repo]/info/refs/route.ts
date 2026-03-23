@@ -5,6 +5,6 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; repo: string }> },
 ) {
-  const { id } = await params
-  return resolveInfoRefsResponse(req, id.replace(/\.git$/, ""))
+  const { id, repo } = await params
+  return resolveInfoRefsResponse(req, id.replace(/\.git$/, ""), repo)
 }

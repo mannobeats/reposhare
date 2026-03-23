@@ -1,27 +1,12 @@
-import crypto from "node:crypto"
 import bcrypt from "bcryptjs"
 import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
+import { getRequiredAppSecret } from "@/lib/app-secret"
 import { prisma } from "@/lib/prisma"
-
-function getAuthSecret(): string {
-  const envSecret = process.env.APP_SECRET
-  if (envSecret && envSecret.length >= 32) return envSecret
-
-  if (process.env.NODE_ENV !== "production") {
-    return "reposhare-local-dev-secret-change-me"
-  }
-
-  const fallbackSeed = `${process.env.PUBLIC_URL || "reposhare"}:${process.cwd()}`
-  return crypto
-    .createHash("sha256")
-    .update(`reposhare-auth-${fallbackSeed}`)
-    .digest("hex")
-}
 
 export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
   return {
-    secret: getAuthSecret(),
+    secret: getRequiredAppSecret(),
     trustHost: true,
     providers: [
       Credentials({

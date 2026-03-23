@@ -1,9 +1,16 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getInstallationToken } from "@/lib/github"
 import { prisma } from "@/lib/prisma"
-import { verifyShareRequestAccess } from "@/lib/share-access"
+import {
+  isExpectedShareRepoSlug,
+  verifyShareRequestAccess,
+} from "@/lib/share-access"
 
-async function resolveInfoRefsResponse(req: NextRequest, shareId: string) {
+async function resolveInfoRefsResponse(
+  req: NextRequest,
+  shareId: string,
+  requestedRepo?: string,
+) {
   const url = new URL(req.url)
   const service = url.searchParams.get("service")
   if (!service)
@@ -22,6 +29,15 @@ async function resolveInfoRefsResponse(req: NextRequest, shareId: string) {
     })
   }
 
+  if (
+    requestedRepo &&
+    !isExpectedShareRepoSlug(requestedRepo, share.repoFullName)
+  ) {
+    return new NextResponse("Repository not found or link expired", {
+      status: 404,
+    })
+  }
+
   if (!share.allowGitClone) {
     return new NextResponse("Git clone is disabled for this share", {
       status: 403,
@@ -30,6 +46,12 @@ async function resolveInfoRefsResponse(req: NextRequest, shareId: string) {
 
   const access = await verifyShareRequestAccess(req, share)
   if (!access.ok) {
+    if (access.reason === "rate-limited") {
+      return new NextResponse("Too many failed attempts for this share", {
+        status: 429,
+      })
+    }
+
     return new NextResponse("Authentication required for this share", {
       status: 401,
       headers: { "WWW-Authenticate": 'Basic realm="RepoShare"' },
