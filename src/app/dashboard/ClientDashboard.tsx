@@ -3,17 +3,19 @@
 import { useEffect, useMemo, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { Github, Lock, Globe, Loader2, Link2, Copy, Trash, Pause, Play, Activity, Terminal, Database, ShieldAlert, Cpu, Settings, User, Search, Save } from "lucide-react"
-import { createShareLink, toggleShareActive, deleteShare, flushProxies, purgeGitHubToken, terminateAccount, updatePublicUrlOverride } from "./actions"
+import { Github, Lock, Globe, Loader2, Link2, Copy, Trash, Pause, Play, Activity, Terminal, Database, ShieldAlert, Cpu, Settings, User, Search, Save, KeyRound, Package, CalendarDays } from "lucide-react"
+import { createShareLink, toggleShareActive, deleteShare, flushProxies, purgeGitHubToken, terminateAccount, updatePublicUrlOverride, updateShareSettings } from "./actions"
 import { toast } from "sonner"
 import { formatDistanceToNow, format } from "date-fns"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
-import type { ActionResult } from "./actions"
+import type { ActionResult, ShareUpdateInput } from "./actions"
 import type { BaseUrlDetails } from "@/lib/base-url"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 interface Props {
   baseUrl: string
   baseUrlDetails: BaseUrlDetails
+  initialTab?: string
   userId: string
   isAppConfigured: boolean
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -21,18 +23,80 @@ interface Props {
   appSlug: string
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   repositories: Record<string, any>[]
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  shares: Record<string, any>[]
+  shares: ShareRecord[]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   analyticsData: Record<string, any>[]
 }
 
-export default function ClientDashboard({ baseUrl, baseUrlDetails, userId, isAppConfigured, installations, appSlug, repositories, shares, analyticsData }: Props) {
+type ShareRecord = {
+  id: string
+  repoFullName: string
+  installationId: string
+  expiresAt: Date | string | null
+  allowGitClone: boolean
+  allowZipDownload: boolean
+  passwordProtected: boolean
+  active: boolean
+  _count: {
+    analytics: number
+  }
+}
+
+type DashboardTab = "connections" | "shares" | "analytics" | "system"
+
+type ShareComposerState = {
+  isOpen: boolean
+  mode: "create" | "edit"
+  id?: string
+  repoFullName: string
+  installationId: string
+  expiresInDays: string
+  password: string
+  clearPassword: boolean
+  allowGitClone: boolean
+  allowZipDownload: boolean
+  passwordProtected: boolean
+}
+
+const TAB_IDS: DashboardTab[] = ["connections", "shares", "analytics", "system"]
+
+function isValidTab(value?: string): value is DashboardTab {
+  return TAB_IDS.includes((value || "") as DashboardTab)
+}
+
+function getRepoName(repoFullName: string) {
+  return repoFullName.split("/")[1] || repoFullName
+}
+
+function getSharePageUrl(baseUrl: string, shareId: string) {
+  return `${baseUrl}/share/${shareId}`
+}
+
+function getShareCloneUrl(baseUrl: string, shareId: string, repoFullName: string) {
+  return `${baseUrl}/share/${shareId}/${getRepoName(repoFullName)}.git`
+}
+
+export default function ClientDashboard({ baseUrl, baseUrlDetails, initialTab, userId, isAppConfigured, installations, appSlug, repositories, shares, analyticsData }: Props) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [creating, setCreating] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<"connections" | "shares" | "analytics" | "system">("connections")
   const [searchQuery, setSearchQuery] = useState("")
+  const [shareSearchQuery, setShareSearchQuery] = useState("")
   const [publicUrlInput, setPublicUrlInput] = useState(baseUrlDetails.overrideUrl)
   const [savingPublicUrl, setSavingPublicUrl] = useState(false)
+  const [composerState, setComposerState] = useState<ShareComposerState>({
+    isOpen: false,
+    mode: "create",
+    repoFullName: "",
+    installationId: "",
+    expiresInDays: "7",
+    password: "",
+    clearPassword: false,
+    allowGitClone: true,
+    allowZipDownload: true,
+    passwordProtected: false,
+  })
 
   const [modalState, setModalState] = useState<{ isOpen: boolean, actionFn: (() => Promise<ActionResult>) | null, warningText: string, successMessage: string }>({
     isOpen: false,
@@ -44,6 +108,20 @@ export default function ClientDashboard({ baseUrl, baseUrlDetails, userId, isApp
   useEffect(() => {
     setPublicUrlInput(baseUrlDetails.overrideUrl)
   }, [baseUrlDetails.overrideUrl])
+
+  const activeTab: DashboardTab = (() => {
+    const urlTab = searchParams.get("tab") ?? undefined
+    if (isValidTab(urlTab)) return urlTab
+    if (isValidTab(initialTab)) return initialTab
+    return "connections"
+  })()
+
+  const handleTabChange = (tab: DashboardTab) => {
+    if (tab === activeTab) return
+    const nextParams = new URLSearchParams(searchParams.toString())
+    nextParams.set("tab", tab)
+    router.replace(`${pathname}?${nextParams.toString()}`, { scroll: false })
+  }
 
   const chartData = useMemo(() => {
     const buckets: Record<string, number> = {}
@@ -59,21 +137,90 @@ export default function ClientDashboard({ baseUrl, baseUrlDetails, userId, isApp
     repo.full_name.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
+  const filteredShares = useMemo(
+    () => shares.filter((share) => share.repoFullName.toLowerCase().includes(shareSearchQuery.toLowerCase())),
+    [shares, shareSearchQuery]
+  )
+
   const handleCreateManifest = () => window.location.href = "/api/github/manifest-redirect"
   const handleInstallApp = () => window.location.href = `https://github.com/apps/${appSlug}/installations/new`
 
-  const handleShare = async (repoName: string, installationId: string) => {
+  const openCreateComposer = (repoName: string, installationId: string) => {
+    setComposerState({
+      isOpen: true,
+      mode: "create",
+      repoFullName: repoName,
+      installationId: String(installationId),
+      expiresInDays: "7",
+      password: "",
+      clearPassword: false,
+      allowGitClone: true,
+      allowZipDownload: true,
+      passwordProtected: false,
+    })
+  }
+
+  const openEditComposer = (share: ShareRecord) => {
+    setComposerState({
+      isOpen: true,
+      mode: "edit",
+      id: share.id,
+      repoFullName: share.repoFullName,
+      installationId: String(share.installationId || ""),
+      expiresInDays: share.expiresAt ? String(Math.max(1, Math.ceil((new Date(share.expiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000)))) : "",
+      password: "",
+      clearPassword: false,
+      allowGitClone: Boolean(share.allowGitClone),
+      allowZipDownload: Boolean(share.allowZipDownload),
+      passwordProtected: Boolean(share.passwordProtected),
+    })
+  }
+
+  const closeComposer = () => {
+    setComposerState((current) => ({ ...current, isOpen: false, password: "", clearPassword: false }))
+  }
+
+  const handleShareSubmit = async () => {
     try {
-      setCreating(repoName)
-      const result = await createShareLink(repoName, installationId, 7)
+      setCreating(composerState.repoFullName)
+      const expiresInDays = composerState.expiresInDays.trim() ? Number(composerState.expiresInDays) : null
+      if (expiresInDays !== null && (!Number.isFinite(expiresInDays) || expiresInDays <= 0)) {
+        toast.error("Expiration must be a positive number of days.")
+        return
+      }
+
+      let result: ActionResult
+      if (composerState.mode === "create") {
+        result = await createShareLink({
+          repoFullName: composerState.repoFullName,
+          installationId: composerState.installationId,
+          expiresInDays,
+          password: composerState.password,
+          allowGitClone: composerState.allowGitClone,
+          allowZipDownload: composerState.allowZipDownload,
+        })
+      } else {
+        const payload: ShareUpdateInput = {
+          id: composerState.id!,
+          expiresInDays,
+          password: composerState.password,
+          clearPassword: composerState.clearPassword,
+          allowGitClone: composerState.allowGitClone,
+          allowZipDownload: composerState.allowZipDownload,
+        }
+        result = await updateShareSettings(payload)
+      }
+
       if (!result.ok) {
         toast.error(result.error)
         return
       }
 
-      toast.success("Repository matrix link established")
+      toast.success(composerState.mode === "create" ? "Repository matrix link established" : "Share settings updated")
+      closeComposer()
+      router.refresh()
     } catch {
-      toast.error("Failed to create the share link")
+      toast.error(composerState.mode === "create" ? "Failed to create the share link" : "Failed to update the share settings")
     } finally {
       setCreating(null)
     }
@@ -83,7 +230,9 @@ export default function ClientDashboard({ baseUrl, baseUrlDetails, userId, isApp
     const result = await toggleShareActive(id, active)
     if (!result.ok) {
       toast.error(result.error)
+      return
     }
+    router.refresh()
   }
 
   const handleDeleteShare = async (id: string) => {
@@ -94,6 +243,7 @@ export default function ClientDashboard({ baseUrl, baseUrlDetails, userId, isApp
     }
 
     toast.success("Share deleted")
+    router.refresh()
   }
 
   const copyText = async (value: string) => {
@@ -125,7 +275,7 @@ export default function ClientDashboard({ baseUrl, baseUrlDetails, userId, isApp
   }
 
   const handleCopyLink = async (id: string) => {
-    const link = `${baseUrl}/share/${id}`
+    const link = getSharePageUrl(baseUrl, id)
     try {
       await copyText(link)
       toast.success("Data-stream copied to memory buffer")
@@ -176,7 +326,7 @@ export default function ClientDashboard({ baseUrl, baseUrlDetails, userId, isApp
       }
 
       toast.success(publicUrlInput.trim() ? "Public URL override saved" : "Public URL override cleared")
-      window.location.reload()
+      router.refresh()
     } catch {
       toast.error("Failed to update the public URL")
     } finally {
@@ -214,12 +364,108 @@ export default function ClientDashboard({ baseUrl, baseUrlDetails, userId, isApp
         </div>
       )}
 
+      {composerState.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+          <div className="bg-background border border-[#5eb8ff]/50 max-w-2xl w-full p-6 shadow-[0_0_30px_rgba(94,184,255,0.15)]">
+            <div className="flex items-center justify-between gap-4 mb-6">
+              <div>
+                <h3 className="text-[#5eb8ff] font-bold uppercase tracking-widest text-lg">
+                  {composerState.mode === "create" ? "Generate Share Tunnel" : "Edit Share Controls"}
+                </h3>
+                <p className="text-[#5eb8ff]/60 text-xs uppercase tracking-widest mt-2">
+                  {composerState.repoFullName}
+                </p>
+              </div>
+              <Button onClick={closeComposer} className="bg-transparent border border-[#5eb8ff]/40 text-[#5eb8ff] hover:bg-[#5eb8ff] hover:text-[#000508] rounded-none uppercase tracking-widest text-xs h-10 px-4">
+                Close
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase tracking-widest text-[#5eb8ff]/60 block">Expiration (Days)</label>
+                <div className="relative">
+                  <CalendarDays className="absolute left-3 top-3 h-4 w-4 text-[#5eb8ff]/40" />
+                  <input
+                    type="number"
+                    min="1"
+                    value={composerState.expiresInDays}
+                    onChange={(e) => setComposerState((current) => ({ ...current, expiresInDays: e.target.value }))}
+                    placeholder="Leave blank for no expiration"
+                    className="w-full bg-[#000508] border border-[#5eb8ff]/40 pl-10 pr-4 py-3 text-[#5eb8ff] placeholder:text-[#5eb8ff]/20 outline-none text-xs tracking-widest focus:border-[#5eb8ff]"
+                  />
+                </div>
+                <p className="text-[10px] uppercase tracking-widest text-[#5eb8ff]/40">Blank means the link never expires.</p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase tracking-widest text-[#5eb8ff]/60 block">
+                  {composerState.mode === "create" ? "Share Password" : "New Password"}
+                </label>
+                <div className="relative">
+                  <KeyRound className="absolute left-3 top-3 h-4 w-4 text-[#5eb8ff]/40" />
+                  <input
+                    type="password"
+                    value={composerState.password}
+                    onChange={(e) => setComposerState((current) => ({ ...current, password: e.target.value }))}
+                    placeholder={composerState.mode === "create" ? "Optional password" : "Leave blank to keep current password"}
+                    className="w-full bg-[#000508] border border-[#5eb8ff]/40 pl-10 pr-4 py-3 text-[#5eb8ff] placeholder:text-[#5eb8ff]/20 outline-none text-xs tracking-widest focus:border-[#5eb8ff]"
+                  />
+                </div>
+                {composerState.mode === "edit" && composerState.passwordProtected ? (
+                  <label className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-[#5eb8ff]/60">
+                    <input
+                      type="checkbox"
+                      checked={composerState.clearPassword}
+                      onChange={(e) => setComposerState((current) => ({ ...current, clearPassword: e.target.checked }))}
+                    />
+                    Clear current password protection
+                  </label>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+              <label className="flex items-center justify-between border border-[#5eb8ff]/30 bg-[#5eb8ff]/5 px-4 py-3 text-xs uppercase tracking-widest text-[#5eb8ff]">
+                <span className="flex items-center gap-2"><Terminal className="w-4 h-4" /> Allow Git Clone</span>
+                <input
+                  type="checkbox"
+                  checked={composerState.allowGitClone}
+                  onChange={(e) => setComposerState((current) => ({ ...current, allowGitClone: e.target.checked }))}
+                />
+              </label>
+              <label className="flex items-center justify-between border border-[#5eb8ff]/30 bg-[#5eb8ff]/5 px-4 py-3 text-xs uppercase tracking-widest text-[#5eb8ff]">
+                <span className="flex items-center gap-2"><Package className="w-4 h-4" /> Allow ZIP Download</span>
+                <input
+                  type="checkbox"
+                  checked={composerState.allowZipDownload}
+                  onChange={(e) => setComposerState((current) => ({ ...current, allowZipDownload: e.target.checked }))}
+                />
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-4 mt-8">
+              <Button onClick={closeComposer} className="bg-transparent border border-[#5eb8ff]/40 text-[#5eb8ff] hover:bg-[#5eb8ff] hover:text-[#000508] rounded-none uppercase tracking-widest text-xs h-12 px-6">
+                Cancel
+              </Button>
+              <Button
+                onClick={handleShareSubmit}
+                disabled={creating === composerState.repoFullName}
+                className="border border-[#5eb8ff] bg-[#5eb8ff] text-[#000508] hover:bg-[#4ea0e6] rounded-none uppercase tracking-widest text-xs h-12 px-6 font-bold"
+              >
+                {creating === composerState.repoFullName ? <Loader2 className="w-4 h-4 animate-spin" /> : composerState.mode === "create" ? "Create Share" : "Save Share Settings"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top Terminal Header Component */}
       <div className="flex border border-[#5eb8ff]/40 bg-[#000508] relative overflow-hidden screen-scanline">
         {tabs.map(tab => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => handleTabChange(tab.id)}
             className={`flex-1 flex items-center justify-center space-x-3 px-6 py-4 text-xs tracking-widest transition-colors ${
               activeTab === tab.id 
                 ? "bg-[#5eb8ff] text-[#000508] font-bold scanline-active" 
@@ -326,8 +572,18 @@ export default function ClientDashboard({ baseUrl, baseUrlDetails, userId, isApp
             
             {/* Active Proxies Section */}
             <section className="space-y-6">
-              <div className="border-b border-[#5eb8ff]/40 pb-4">
-                <h2 className="text-xl tracking-widest text-[#5eb8ff] uppercase">&gt; Active Proxy Endpoints</h2>
+              <div className="flex flex-col md:flex-row md:items-end justify-between border-b border-[#5eb8ff]/40 pb-4 space-y-4 md:space-y-0">
+                <h2 className="text-xl tracking-widest text-[#5eb8ff] uppercase">&gt; Active Proxy Endpoints [{shares.length}]</h2>
+                <div className="relative w-full md:w-80">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-[#5eb8ff]/50" />
+                  <input
+                    type="text"
+                    placeholder="SEARCH SHARES..."
+                    value={shareSearchQuery}
+                    onChange={(e) => setShareSearchQuery(e.target.value)}
+                    className="w-full bg-[#000508] border border-[#5eb8ff]/40 text-[#5eb8ff] placeholder:text-[#5eb8ff]/30 pl-10 pr-4 py-2 text-xs tracking-widest uppercase outline-none focus:border-[#5eb8ff]"
+                  />
+                </div>
               </div>
 
               {shares.length === 0 ? (
@@ -335,9 +591,14 @@ export default function ClientDashboard({ baseUrl, baseUrlDetails, userId, isApp
                   <Link2 className="w-8 h-8 text-[#5eb8ff]/50" />
                   <p className="text-[#5eb8ff]/70 text-xs tracking-widest uppercase">&gt; 0 ACTIVE STREAMS CONFIGURED</p>
                 </div>
+              ) : filteredShares.length === 0 ? (
+                <div className="p-12 border border-dashed border-[#5eb8ff]/40 flex flex-col items-center justify-center text-center space-y-4 bg-[#5eb8ff]/5">
+                  <Search className="w-8 h-8 text-[#5eb8ff]/50" />
+                  <p className="text-[#5eb8ff]/70 text-xs tracking-widest uppercase">&gt; NO SHARES MATCH THE CURRENT QUERY</p>
+                </div>
               ) : (
-                <div className="grid grid-cols-1 gap-4">
-                  {shares.map(share => (
+                <div className="flex flex-col gap-4 max-h-[460px] overflow-y-auto custom-scrollbar pr-2">
+                  {filteredShares.map(share => (
                     <div key={share.id} className="relative p-5 bg-[#000508] border border-[#5eb8ff]/40 transition-colors flex flex-col md:flex-row justify-between md:items-center space-y-4 md:space-y-0 relative">
                       <div className={`absolute top-0 left-0 w-2 h-full ${share.active ? "bg-[#5eb8ff]" : "bg-[#000508] border-r border-[#5eb8ff]/40"}`} />
                       
@@ -354,12 +615,23 @@ export default function ClientDashboard({ baseUrl, baseUrlDetails, userId, isApp
                                {share._count.analytics} HITS
                              </span>
                            </div>
+                           <div className="flex flex-wrap gap-2 mt-3 text-[10px] uppercase tracking-widest">
+                             <span className="border border-[#5eb8ff]/30 bg-[#5eb8ff]/10 px-2 py-1">{share.allowGitClone ? "Git Clone On" : "Git Clone Off"}</span>
+                             <span className="border border-[#5eb8ff]/30 bg-[#5eb8ff]/10 px-2 py-1">{share.allowZipDownload ? "ZIP On" : "ZIP Off"}</span>
+                             <span className="border border-[#5eb8ff]/30 bg-[#5eb8ff]/10 px-2 py-1">{share.passwordProtected ? "Password" : "No Password"}</span>
+                           </div>
+                           <div className="mt-3 text-[10px] uppercase tracking-widest text-[#5eb8ff]/45 break-all">
+                             Clone Path: {getShareCloneUrl(baseUrl, share.id, share.repoFullName)}
+                           </div>
                         </div>
                       </div>
 
-                      <div className="flex items-center space-x-3 pl-4">
+                      <div className="flex items-center flex-wrap gap-3 pl-4">
                         <Button variant="outline" size="sm" onClick={() => handleCopyLink(share.id)} className="h-9 rounded-none border-[#5eb8ff]/50 text-[#5eb8ff] bg-transparent hover:bg-[#5eb8ff] hover:text-[#000508] font-bold uppercase text-[10px] tracking-widest">
                           <Copy className="w-3 h-3 mr-2" /> BUFFER URI
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => openEditComposer(share)} className="h-9 rounded-none border-[#5eb8ff]/50 text-[#5eb8ff] bg-transparent hover:bg-[#5eb8ff] hover:text-[#000508] font-bold uppercase text-[10px] tracking-widest">
+                          <Settings className="w-3 h-3 mr-2" /> CONTROLS
                         </Button>
                         <Button variant="outline" size="icon" onClick={() => handleToggleShare(share.id, !share.active)} className={`h-9 w-9 rounded-none border-[#5eb8ff]/50 bg-transparent ${share.active ? "text-[#5eb8ff] hover:bg-[#5eb8ff] hover:text-[#000508]" : "text-[#5eb8ff]/40 hover:text-[#5eb8ff]"}`}>
                           {share.active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
@@ -420,7 +692,7 @@ export default function ClientDashboard({ baseUrl, baseUrlDetails, userId, isApp
                          
                          <span className="w-48 text-right">
                            <Button 
-                             onClick={() => handleShare(repo.full_name, repo.installation_id)}
+                             onClick={() => openCreateComposer(repo.full_name, repo.installation_id)}
                              disabled={creating === repo.full_name}
                              className="h-8 px-4 rounded-none border border-[#5eb8ff] bg-transparent text-[#5eb8ff] hover:bg-[#5eb8ff] hover:text-[#000508] uppercase text-[10px] tracking-widest font-bold"
                            >

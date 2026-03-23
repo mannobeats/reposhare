@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getInstallationToken } from "@/lib/github"
+import { verifyShareRequestAccess } from "@/lib/share-access"
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const id = (await params).id.replace(/\.git$/, "")
@@ -12,6 +13,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   // Same robust expiration and permission checking logic is enforced uniformly
   if (!share || (share.expiresAt && share.expiresAt < new Date())) {
     return NextResponse.json({ error: "Link expired or disabled." }, { status: 404 })
+  }
+
+  if (!share.allowZipDownload) {
+    return NextResponse.json({ error: "ZIP downloads are disabled for this share." }, { status: 403 })
+  }
+
+  const access = await verifyShareRequestAccess(req, share)
+  if (!access.ok) {
+    return NextResponse.json({ error: "Password required for this share." }, { status: 401 })
   }
 
   if (!share.installationId) {

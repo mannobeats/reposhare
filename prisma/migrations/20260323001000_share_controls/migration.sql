@@ -1,0 +1,1 @@
+ALTER TABLE "Share" ADD COLUMN "allowZipDownload" BOOLEAN NOT NULL DEFAULT true;

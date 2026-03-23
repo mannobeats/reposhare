@@ -10,13 +10,18 @@ import { LogOut, TerminalSquare } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
-export default function DashboardPage() {
-  return <DashboardContent />
+type DashboardPageProps = {
+  searchParams: Promise<{ tab?: string }>
 }
 
-async function DashboardContent() {
+export default async function DashboardPage({ searchParams }: DashboardPageProps) {
+  return <DashboardContent searchParams={searchParams} />
+}
+
+async function DashboardContent({ searchParams }: DashboardPageProps) {
   const session = await auth()
   if (!session?.user?.email) redirect("/")
+  const resolvedSearchParams = await searchParams
 
   const user = await prisma.user.findUnique({ where: { email: session.user.email } })
   if (!user) {
@@ -112,12 +117,16 @@ async function DashboardContent() {
         <ClientDashboard 
           baseUrl={baseUrlDetails.activeUrl}
           baseUrlDetails={baseUrlDetails}
+          initialTab={resolvedSearchParams.tab}
           userId={user.id}
           isAppConfigured={isAppConfigured}
           installations={installations} 
           appSlug={appSlug} 
           repositories={repos} 
-          shares={shares} 
+          shares={shares.map((share) => ({
+            ...share,
+            passwordProtected: Boolean(share.passwordHash),
+          }))} 
           analyticsData={analyticsByDate}
         />
       </main>

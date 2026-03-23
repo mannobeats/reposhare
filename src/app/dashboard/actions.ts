@@ -4,15 +4,17 @@ import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { auth, signOut } from "@/auth"
 import { normalizePublicUrl } from "@/lib/base-url"
+import bcrypt from "bcryptjs"
 
 export type ActionResult = {
   ok: boolean
   error?: string
   redirectTo?: string
+  shareId?: string
 }
 
-function success(redirectTo?: string): ActionResult {
-  return { ok: true, redirectTo }
+function success(redirectTo?: string, shareId?: string): ActionResult {
+  return { ok: true, redirectTo, shareId }
 }
 
 function failure(error: string): ActionResult {
@@ -29,27 +31,57 @@ async function requireUser() {
   return user as typeof user | ActionResult
 }
 
-export async function createShareLink(repoFullName: string, installationId: string, expireDays?: number): Promise<ActionResult> {
+export type ShareOptionsInput = {
+  repoFullName: string
+  installationId: string
+  expiresInDays?: number | null
+  password?: string
+  allowGitClone?: boolean
+  allowZipDownload?: boolean
+}
+
+export async function createShareLink(options: ShareOptionsInput): Promise<ActionResult> {
   const user = await requireUser()
   if ("ok" in user) return user
 
-  const expiresAt = expireDays ? new Date(Date.now() + expireDays * 24 * 60 * 60 * 1000) : null
+  if (options.allowGitClone === false && options.allowZipDownload === false) {
+    return failure("Enable at least one access method for the share.")
+  }
+
+  if (options.password?.trim() && options.password.trim().length < 4) {
+    return failure("Share passwords must be at least 4 characters long.")
+  }
+
+  const expiresAt = options.expiresInDays ? new Date(Date.now() + options.expiresInDays * 24 * 60 * 60 * 1000) : null
+  const passwordHash = options.password?.trim() ? await bcrypt.hash(options.password.trim(), 10) : null
 
   try {
-    await prisma.share.create({
+    const share = await prisma.share.create({
       data: {
         userId: user.id,
-        repoFullName: repoFullName,
-        installationId: String(installationId),
-        expiresAt: expiresAt,
+        repoFullName: options.repoFullName,
+        installationId: String(options.installationId),
+        expiresAt,
+        passwordHash,
+        allowGitClone: options.allowGitClone ?? true,
+        allowZipDownload: options.allowZipDownload ?? true,
       }
     })
 
     revalidatePath("/dashboard")
-    return success()
+    return success(undefined, share.id)
   } catch {
     return failure("Failed to create the share link.")
   }
+}
+
+export type ShareUpdateInput = {
+  id: string
+  expiresInDays?: number | null
+  password?: string
+  clearPassword?: boolean
+  allowGitClone?: boolean
+  allowZipDownload?: boolean
 }
 
 export async function toggleShareActive(id: string, active: boolean): Promise<ActionResult> {
@@ -83,6 +115,45 @@ export async function deleteShare(id: string): Promise<ActionResult> {
     return success()
   } catch {
     return failure("Failed to delete the share.")
+  }
+}
+
+export async function updateShareSettings(input: ShareUpdateInput): Promise<ActionResult> {
+  const user = await requireUser()
+  if ("ok" in user) return user
+
+  const share = await prisma.share.findUnique({ where: { id: input.id } })
+  if (!share || share.userId !== user.id) return failure("You cannot modify that share.")
+
+  if (input.allowGitClone === false && input.allowZipDownload === false) {
+    return failure("Enable at least one access method for the share.")
+  }
+
+  if (input.password?.trim() && input.password.trim().length < 4) {
+    return failure("Share passwords must be at least 4 characters long.")
+  }
+
+  const nextPasswordHash = input.clearPassword
+    ? null
+    : input.password?.trim()
+      ? await bcrypt.hash(input.password.trim(), 10)
+      : undefined
+
+  try {
+    await prisma.share.update({
+      where: { id: input.id },
+      data: {
+        expiresAt: input.expiresInDays ? new Date(Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000) : null,
+        allowGitClone: input.allowGitClone ?? share.allowGitClone,
+        allowZipDownload: input.allowZipDownload ?? share.allowZipDownload,
+        ...(nextPasswordHash !== undefined ? { passwordHash: nextPasswordHash } : {}),
+      }
+    })
+    revalidatePath("/dashboard")
+    revalidatePath(`/share/${input.id}`)
+    return success()
+  } catch {
+    return failure("Failed to update the share settings.")
   }
 }
 
