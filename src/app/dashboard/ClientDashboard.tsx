@@ -1,17 +1,19 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { Github, Lock, Globe, Loader2, Link2, Copy, Trash, Pause, Play, Activity, Terminal, Database, ShieldAlert, Cpu, Settings, User, Search } from "lucide-react"
-import { createShareLink, toggleShareActive, deleteShare, flushProxies, purgeGitHubToken, terminateAccount } from "./actions"
+import { Github, Lock, Globe, Loader2, Link2, Copy, Trash, Pause, Play, Activity, Terminal, Database, ShieldAlert, Cpu, Settings, User, Search, Save } from "lucide-react"
+import { createShareLink, toggleShareActive, deleteShare, flushProxies, purgeGitHubToken, terminateAccount, updatePublicUrlOverride } from "./actions"
 import { toast } from "sonner"
 import { formatDistanceToNow, format } from "date-fns"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import type { ActionResult } from "./actions"
+import type { BaseUrlDetails } from "@/lib/base-url"
 
 interface Props {
   baseUrl: string
+  baseUrlDetails: BaseUrlDetails
   userId: string
   isAppConfigured: boolean
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -25,10 +27,12 @@ interface Props {
   analyticsData: Record<string, any>[]
 }
 
-export default function ClientDashboard({ baseUrl, userId, isAppConfigured, installations, appSlug, repositories, shares, analyticsData }: Props) {
+export default function ClientDashboard({ baseUrl, baseUrlDetails, userId, isAppConfigured, installations, appSlug, repositories, shares, analyticsData }: Props) {
   const [creating, setCreating] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<"connections" | "shares" | "analytics" | "system">("connections")
   const [searchQuery, setSearchQuery] = useState("")
+  const [publicUrlInput, setPublicUrlInput] = useState(baseUrlDetails.overrideUrl)
+  const [savingPublicUrl, setSavingPublicUrl] = useState(false)
 
   const [modalState, setModalState] = useState<{ isOpen: boolean, actionFn: (() => Promise<ActionResult>) | null, warningText: string, successMessage: string }>({
     isOpen: false,
@@ -36,6 +40,10 @@ export default function ClientDashboard({ baseUrl, userId, isAppConfigured, inst
     warningText: "",
     successMessage: "",
   })
+
+  useEffect(() => {
+    setPublicUrlInput(baseUrlDetails.overrideUrl)
+  }, [baseUrlDetails.overrideUrl])
 
   const chartData = useMemo(() => {
     const buckets: Record<string, number> = {}
@@ -123,6 +131,24 @@ export default function ClientDashboard({ baseUrl, userId, isAppConfigured, inst
       } finally {
         setModalState((current) => ({ ...current, isOpen: false }))
       }
+    }
+  }
+
+  const handleSavePublicUrl = async () => {
+    try {
+      setSavingPublicUrl(true)
+      const result = await updatePublicUrlOverride(publicUrlInput)
+      if (!result.ok) {
+        toast.error(result.error)
+        return
+      }
+
+      toast.success(publicUrlInput.trim() ? "Public URL override saved" : "Public URL override cleared")
+      window.location.reload()
+    } catch {
+      toast.error("Failed to update the public URL")
+    } finally {
+      setSavingPublicUrl(false)
     }
   }
 
@@ -436,6 +462,65 @@ export default function ClientDashboard({ baseUrl, userId, isAppConfigured, inst
                     <p className="text-[#5eb8ff]/50 text-xs tracking-widest uppercase mt-1">ACCESS LEVEL: OMNI_ADMIN</p>
                   </div>
                 </div>
+             </div>
+
+             <div className="p-6 border border-[#5eb8ff]/40 bg-[#000508] space-y-6">
+                <h3 className="text-xs text-[#5eb8ff] tracking-widest flex items-center uppercase">
+                  <Globe className="w-4 h-4 mr-2" /> Network Identity
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="border border-[#5eb8ff]/30 bg-[#5eb8ff]/5 p-4">
+                    <div className="text-[10px] uppercase tracking-widest text-[#5eb8ff]/50">Active URL</div>
+                    <div className="mt-2 text-xs text-[#5eb8ff] break-all">{baseUrlDetails.activeUrl}</div>
+                  </div>
+                  <div className="border border-[#5eb8ff]/30 bg-[#5eb8ff]/5 p-4">
+                    <div className="text-[10px] uppercase tracking-widest text-[#5eb8ff]/50">Source</div>
+                    <div className="mt-2 text-xs text-[#5eb8ff] uppercase tracking-widest">
+                      {baseUrlDetails.source === "override" ? "Dashboard Override" : baseUrlDetails.source === "environment" ? "Installer / Environment" : "Request Detection"}
+                    </div>
+                  </div>
+                  <div className="border border-[#5eb8ff]/30 bg-[#5eb8ff]/5 p-4">
+                    <div className="text-[10px] uppercase tracking-widest text-[#5eb8ff]/50">Detected URL</div>
+                    <div className="mt-2 text-xs text-[#5eb8ff] break-all">{baseUrlDetails.detectedUrl}</div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase tracking-widest text-[#5eb8ff]/60 block">
+                    Dashboard URL Override
+                  </label>
+                  <input
+                    type="text"
+                    value={publicUrlInput}
+                    onChange={(e) => setPublicUrlInput(e.target.value)}
+                    placeholder={baseUrlDetails.envUrl || baseUrlDetails.detectedUrl}
+                    className="w-full bg-[#000508] border border-[#5eb8ff]/40 px-4 py-3 text-[#5eb8ff] placeholder:text-[#5eb8ff]/20 outline-none text-xs tracking-widest focus:border-[#5eb8ff] transition-colors"
+                  />
+                  <p className="text-[10px] text-[#5eb8ff]/45 uppercase tracking-wider leading-relaxed">
+                    Leave this blank to use the installer URL or the detected request URL. Save a value here if you move RepoShare to a new domain and want to update links from the dashboard.
+                  </p>
+                </div>
+
+                <div className="space-y-3 border border-[#5eb8ff]/20 bg-[#5eb8ff]/5 p-4">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-widest text-[#5eb8ff]/50">Installer / Environment URL</div>
+                    <div className="mt-2 text-xs text-[#5eb8ff] break-all">{baseUrlDetails.envUrl || "Not set"}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-widest text-[#5eb8ff]/50">Saved Dashboard Override</div>
+                    <div className="mt-2 text-xs text-[#5eb8ff] break-all">{baseUrlDetails.overrideUrl || "Not set"}</div>
+                  </div>
+                </div>
+
+                <Button
+                  onClick={handleSavePublicUrl}
+                  disabled={savingPublicUrl}
+                  className="w-full h-12 rounded-none border border-[#5eb8ff] bg-[#5eb8ff] text-[#000508] hover:bg-[#4ea0e6] uppercase tracking-widest text-xs font-bold"
+                >
+                  {savingPublicUrl ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                  {savingPublicUrl ? "SAVING..." : "SAVE NETWORK URL"}
+                </Button>
              </div>
 
              <div className="p-6 border border-[#5eb8ff]/40 bg-[#000508]">

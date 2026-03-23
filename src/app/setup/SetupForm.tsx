@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { motion } from "framer-motion"
-import { Globe, Mail, Lock, Terminal, Shield } from "lucide-react"
+import { Mail, Lock, Terminal, Shield } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { setupPlatform } from "./actions"
 import { toast } from "sonner"
@@ -57,25 +57,12 @@ export default function SetupForm() {
                 Initialize RepoShare
               </h1>
               <p className="text-[#5eb8ff]/60 text-xs max-w-sm mx-auto mt-3 uppercase tracking-widest leading-relaxed">
-                &gt; Create your administrative account and configure platform network settings.
+                &gt; Create your administrative account to bring the control plane online.
               </p>
             </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6 pl-4">
-            <div className="space-y-2">
-              <label className="text-[10px] uppercase text-[#5eb8ff]/60 tracking-widest block">Public Domain URL (Optional):</label>
-              <div className="relative">
-                <Globe className="absolute left-3 top-3 h-4 w-4 text-[#5eb8ff]/40" />
-                <input 
-                  name="publicUrl"
-                  placeholder="https://reposhare.my-domain.com" 
-                  className="w-full bg-[#000508] border border-[#5eb8ff]/40 pl-10 pr-4 py-3 text-[#5eb8ff] placeholder:text-[#5eb8ff]/20 outline-none text-xs tracking-widest focus:border-[#5eb8ff] transition-colors"
-                />
-              </div>
-              <p className="text-[10px] text-[#5eb8ff]/40 uppercase tracking-wider">Leaving this empty will disable GitHub Webhook syncing. You can set this later.</p>
-            </div>
-
             <div className="space-y-2">
               <label className="text-[10px] uppercase text-[#5eb8ff]/60 tracking-widest block">Admin Email:</label>
               <div className="relative">

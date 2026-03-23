@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { auth, signOut } from "@/auth"
+import { normalizePublicUrl } from "@/lib/base-url"
 
 export type ActionResult = {
   ok: boolean
@@ -123,6 +124,38 @@ export async function purgeGitHubToken(): Promise<ActionResult> {
     return success()
   } catch {
     return failure("Failed to reset the GitHub app configuration.")
+  }
+}
+
+export async function updatePublicUrlOverride(publicUrl: string): Promise<ActionResult> {
+  const user = await requireUser()
+  if ("ok" in user) return user
+  if (user.role !== "ADMIN") return failure("Admin access is required.")
+
+  const trimmed = publicUrl.trim()
+  const normalized = trimmed ? normalizePublicUrl(trimmed) : null
+
+  try {
+    await prisma.systemConfig.upsert({
+      where: { id: "singleton" },
+      update: { publicUrl: normalized },
+      create: {
+        id: "singleton",
+        publicUrl: normalized,
+        isSetupComplete: true,
+        appId: "temp",
+        clientId: "temp",
+        clientSecret: "temp",
+        webhookSecret: "temp",
+        privateKey: "temp",
+      }
+    })
+
+    revalidatePath("/")
+    revalidatePath("/dashboard")
+    return success()
+  } catch {
+    return failure("Failed to update the public URL.")
   }
 }
 

@@ -15,12 +15,20 @@ export function normalizePublicUrl(input: string) {
   return stripTrailingSlash(url.toString())
 }
 
-export async function getConfiguredPublicUrl() {
-  const envUrl = process.env.PUBLIC_URL?.trim()
-  if (envUrl) return normalizePublicUrl(envUrl)
+export type BaseUrlDetails = {
+  activeUrl: string
+  source: "override" | "environment" | "detected"
+  overrideUrl: string
+  envUrl: string
+  detectedUrl: string
+}
 
+export async function getConfiguredPublicUrl() {
   const config = await prisma.systemConfig.findUnique({ where: { id: "singleton" } })
   if (config?.publicUrl?.trim()) return normalizePublicUrl(config.publicUrl)
+
+  const envUrl = process.env.PUBLIC_URL?.trim()
+  if (envUrl) return normalizePublicUrl(envUrl)
 
   return ""
 }
@@ -35,4 +43,39 @@ export async function getRequestBaseUrl() {
 
 export async function getCanonicalBaseUrl() {
   return (await getConfiguredPublicUrl()) || stripTrailingSlash(await getRequestBaseUrl())
+}
+
+export async function getBaseUrlDetails(): Promise<BaseUrlDetails> {
+  const config = await prisma.systemConfig.findUnique({ where: { id: "singleton" } })
+  const overrideUrl = config?.publicUrl?.trim() ? normalizePublicUrl(config.publicUrl) : ""
+  const envUrl = process.env.PUBLIC_URL?.trim() ? normalizePublicUrl(process.env.PUBLIC_URL) : ""
+  const detectedUrl = stripTrailingSlash(await getRequestBaseUrl())
+
+  if (overrideUrl) {
+    return {
+      activeUrl: overrideUrl,
+      source: "override",
+      overrideUrl,
+      envUrl,
+      detectedUrl,
+    }
+  }
+
+  if (envUrl) {
+    return {
+      activeUrl: envUrl,
+      source: "environment",
+      overrideUrl: "",
+      envUrl,
+      detectedUrl,
+    }
+  }
+
+  return {
+    activeUrl: detectedUrl,
+    source: "detected",
+    overrideUrl: "",
+    envUrl: "",
+    detectedUrl,
+  }
 }
