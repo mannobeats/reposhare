@@ -20,7 +20,7 @@ ENV NODE_ENV=production
 RUN npm run build
 
 FROM node:22-alpine AS runner
-RUN apk add --no-cache libc6-compat wget
+RUN apk add --no-cache libc6-compat su-exec wget
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -42,8 +42,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts ./prisma.config.
 COPY --chown=nextjs:nodejs docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
-USER nextjs
 
 EXPOSE 3417
 

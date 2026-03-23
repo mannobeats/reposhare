@@ -2,7 +2,8 @@
 set -eu
 
 mkdir -p /data
+chown -R nextjs:nodejs /data
 
-node scripts/apply-migrations.mjs
+su-exec nextjs node scripts/apply-migrations.mjs
 
-exec "$@"
+exec su-exec nextjs "$@"
