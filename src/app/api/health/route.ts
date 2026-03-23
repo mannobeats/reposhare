@@ -19,7 +19,7 @@ export async function GET() {
         database: "unreachable",
         message,
       },
-      { status: 503 }
+      { status: 503 },
     )
   }
 }

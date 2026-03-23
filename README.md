@@ -43,10 +43,10 @@ docker compose up -d
 ```bash
 git clone https://github.com/mannobeats/reposhare.git
 cd reposhare
-npm install
+pnpm install
 cp .env.example .env
-npm run db:init
-npm run dev
+pnpm run db:init
+pnpm run dev
 ```
 
 Default local URL:

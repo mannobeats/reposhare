@@ -1,11 +1,11 @@
 "use client"
 
-import { useState } from "react"
 import { motion } from "framer-motion"
-import { Mail, Lock, Terminal, Shield } from "lucide-react"
+import { Lock, Mail, Shield, Terminal } from "lucide-react"
+import { useState } from "react"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { setupPlatform } from "./actions"
-import { toast } from "sonner"
 
 export default function SetupForm() {
   const [isLoading, setIsLoading] = useState(false)
@@ -13,7 +13,7 @@ export default function SetupForm() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    
+
     const formData = new FormData(e.currentTarget)
     const password = (formData.get("password") as string) || ""
     const confirmPassword = (formData.get("confirmPassword") as string) || ""
@@ -31,7 +31,8 @@ export default function SetupForm() {
       await setupPlatform(formData)
       window.location.href = "/"
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to initialize platform"
+      const message =
+        err instanceof Error ? err.message : "Failed to initialize platform"
       toast.error(message)
       setIsLoading(false)
     }
@@ -39,7 +40,7 @@ export default function SetupForm() {
 
   return (
     <div className="min-h-screen bg-[#000508] text-[#5eb8ff] flex items-center justify-center p-4 font-mono screen-scanline selection:bg-[#5eb8ff]/20">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
@@ -47,7 +48,7 @@ export default function SetupForm() {
       >
         <div className="border border-[#5eb8ff]/40 bg-[#000508] p-8 relative">
           <div className="absolute top-0 left-0 w-2 h-full bg-[#5eb8ff]" />
-          
+
           <div className="flex flex-col items-center text-center space-y-4 mb-8 pl-4">
             <div className="h-16 w-16 border border-[#5eb8ff] flex items-center justify-center text-[#5eb8ff]">
               <Terminal className="w-8 h-8" />
@@ -57,21 +58,28 @@ export default function SetupForm() {
                 Initialize RepoShare
               </h1>
               <p className="text-[#5eb8ff]/60 text-xs max-w-sm mx-auto mt-3 uppercase tracking-widest leading-relaxed">
-                &gt; Create your administrative account to bring the control plane online.
+                &gt; Create your administrative account to bring the control
+                plane online.
               </p>
             </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6 pl-4">
             <div className="space-y-2">
-              <label className="text-[10px] uppercase text-[#5eb8ff]/60 tracking-widest block">Admin Email:</label>
+              <label
+                htmlFor="setup-email"
+                className="text-[10px] uppercase text-[#5eb8ff]/60 tracking-widest block"
+              >
+                Admin Email:
+              </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-3 h-4 w-4 text-[#5eb8ff]/40" />
-                <input 
+                <input
+                  id="setup-email"
                   name="email"
                   type="email"
                   required
-                  placeholder="admin@example.com" 
+                  placeholder="admin@example.com"
                   className="w-full bg-[#000508] border border-[#5eb8ff]/40 pl-10 pr-4 py-3 text-[#5eb8ff] placeholder:text-[#5eb8ff]/20 outline-none text-xs tracking-widest focus:border-[#5eb8ff] transition-colors"
                 />
               </div>
@@ -79,14 +87,20 @@ export default function SetupForm() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-[10px] uppercase text-[#5eb8ff]/60 tracking-widest block">Admin Password:</label>
+                <label
+                  htmlFor="setup-password"
+                  className="text-[10px] uppercase text-[#5eb8ff]/60 tracking-widest block"
+                >
+                  Admin Password:
+                </label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-3 h-4 w-4 text-[#5eb8ff]/40" />
-                  <input 
+                  <input
+                    id="setup-password"
                     name="password"
                     type="password"
                     required
-                    placeholder="••••••••" 
+                    placeholder="••••••••"
                     minLength={8}
                     className="w-full bg-[#000508] border border-[#5eb8ff]/40 pl-10 pr-4 py-3 text-[#5eb8ff] placeholder:text-[#5eb8ff]/20 outline-none text-xs tracking-widest focus:border-[#5eb8ff] transition-colors"
                   />
@@ -94,14 +108,20 @@ export default function SetupForm() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] uppercase text-[#5eb8ff]/60 tracking-widest block">Confirm Password:</label>
+                <label
+                  htmlFor="setup-confirm-password"
+                  className="text-[10px] uppercase text-[#5eb8ff]/60 tracking-widest block"
+                >
+                  Confirm Password:
+                </label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-3 h-4 w-4 text-[#5eb8ff]/40" />
-                  <input 
+                  <input
+                    id="setup-confirm-password"
                     name="confirmPassword"
                     type="password"
                     required
-                    placeholder="••••••••" 
+                    placeholder="••••••••"
                     minLength={8}
                     className="w-full bg-[#000508] border border-[#5eb8ff]/40 pl-10 pr-4 py-3 text-[#5eb8ff] placeholder:text-[#5eb8ff]/20 outline-none text-xs tracking-widest focus:border-[#5eb8ff] transition-colors"
                   />
@@ -116,7 +136,7 @@ export default function SetupForm() {
             ) : null}
 
             <div className="pt-4 border-t border-[#5eb8ff]/20 mt-6">
-              <Button 
+              <Button
                 type="submit"
                 disabled={isLoading}
                 className="w-full bg-[#5eb8ff] text-[#000508] hover:bg-[#4ea0e6] h-12 rounded-none font-bold text-xs uppercase tracking-widest transition-all scanline-button"

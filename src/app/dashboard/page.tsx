@@ -1,12 +1,12 @@
+import { createAppAuth } from "@octokit/auth-app"
+import { Octokit } from "@octokit/rest"
+import { LogOut, TerminalSquare } from "lucide-react"
 import { redirect } from "next/navigation"
 import { auth, signOut } from "@/auth"
-import { prisma } from "@/lib/prisma"
-import { getOctokitForInstallation } from "@/lib/github"
 import { getBaseUrlDetails } from "@/lib/base-url"
-import { Octokit } from "@octokit/rest"
-import { createAppAuth } from "@octokit/auth-app"
+import { getOctokitForInstallation } from "@/lib/github"
+import { prisma } from "@/lib/prisma"
 import ClientDashboard from "./ClientDashboard"
-import { LogOut, TerminalSquare } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
@@ -14,7 +14,9 @@ type DashboardPageProps = {
   searchParams: Promise<{ tab?: string }>
 }
 
-export default async function DashboardPage({ searchParams }: DashboardPageProps) {
+export default async function DashboardPage({
+  searchParams,
+}: DashboardPageProps) {
   return <DashboardContent searchParams={searchParams} />
 }
 
@@ -23,59 +25,70 @@ async function DashboardContent({ searchParams }: DashboardPageProps) {
   if (!session?.user?.email) redirect("/")
   const resolvedSearchParams = await searchParams
 
-  const user = await prisma.user.findUnique({ where: { email: session.user.email } })
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+  })
   if (!user) {
     redirect("/")
   }
 
-  const config = await prisma.systemConfig.findUnique({ where: { id: "singleton" } })
+  const config = await prisma.systemConfig.findUnique({
+    where: { id: "singleton" },
+  })
   const isAppConfigured = Boolean(config && config.appId !== "temp")
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let repos: Record<string, any>[] = []
   let appSlug = ""
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let installations: Record<string, any>[] = []
 
   if (isAppConfigured) {
     const appOctokit = new Octokit({
       authStrategy: createAppAuth,
-      auth: { appId: config!.appId, privateKey: config!.privateKey }
+      auth: { appId: config?.appId, privateKey: config?.privateKey },
     })
-    
+
     try {
       const appData = await appOctokit.rest.apps.getAuthenticated()
       appSlug = appData.data?.slug || ""
-      
-      const instData = await appOctokit.paginate(appOctokit.rest.apps.listInstallations, { per_page: 100 })
-      installations = instData.map(i => ({
+
+      const instData = await appOctokit.paginate(
+        appOctokit.rest.apps.listInstallations,
+        { per_page: 100 },
+      )
+      installations = instData.map((i) => ({
         id: i.id,
         accountName: i.account?.login || "Unknown",
         type: i.account?.type || "Unknown",
-        avatar: i.account?.avatar_url
+        avatar: i.account?.avatar_url,
       }))
-      
+
       for (const inst of instData) {
         try {
           const octokit = await getOctokitForInstallation(inst.id)
           const allRepos = await octokit.paginate(
             octokit.rest.apps.listReposAccessibleToInstallation,
             { per_page: 100 },
-            (response) => response.data
+            (response) => response.data,
           )
 
-          const enhancedRepos = allRepos.map(r => ({
+          const enhancedRepos = allRepos.map((r) => ({
             ...r,
             installation_id: inst.id,
-            account_login: inst.account?.login
+            account_login: inst.account?.login,
           }))
           repos = [...repos, ...enhancedRepos]
         } catch (subErr) {
-          console.error(`Failed to fetch repos for installation ${inst.id}`, subErr)
+          console.error(
+            `Failed to fetch repos for installation ${inst.id}`,
+            subErr,
+          )
         }
       }
     } catch (e) {
-      console.error("Failed to initialize multi-installation fetch constraints.", e)
+      console.error(
+        "Failed to initialize multi-installation fetch constraints.",
+        e,
+      )
     }
   }
 
@@ -83,12 +96,12 @@ async function DashboardContent({ searchParams }: DashboardPageProps) {
     where: { userId: user.id },
     orderBy: { createdAt: "desc" },
     include: {
-      _count: { select: { analytics: true } }
-    }
+      _count: { select: { analytics: true } },
+    },
   })
 
   const analyticsByDate = await prisma.analyticEvent.groupBy({
-    by: ['type', 'createdAt'],
+    by: ["type", "createdAt"],
     where: { share: { userId: user.id } },
     _count: true,
   })
@@ -103,13 +116,20 @@ async function DashboardContent({ searchParams }: DashboardPageProps) {
             <div className="h-8 w-8 border border-[#5eb8ff] flex items-center justify-center text-[#5eb8ff]">
               <TerminalSquare className="w-4 h-4" />
             </div>
-            <span className="font-bold tracking-widest text-[#5eb8ff] text-sm uppercase">REPOSHARE<span className="opacity-50">_CTRL</span></span>
+            <span className="font-bold tracking-widest text-[#5eb8ff] text-sm uppercase">
+              REPOSHARE<span className="opacity-50">_CTRL</span>
+            </span>
           </div>
-          <form action={async () => {
-             "use server"
-             await signOut()
-          }}>
-            <button className="flex items-center space-x-2 text-xs uppercase font-bold tracking-widest text-[#5eb8ff]/60 hover:text-[#000508] hover:bg-[#5eb8ff] transition-colors border border-transparent hover:border-[#5eb8ff] px-3 py-1.5">
+          <form
+            action={async () => {
+              "use server"
+              await signOut()
+            }}
+          >
+            <button
+              type="submit"
+              className="flex items-center space-x-2 text-xs uppercase font-bold tracking-widest text-[#5eb8ff]/60 hover:text-[#000508] hover:bg-[#5eb8ff] transition-colors border border-transparent hover:border-[#5eb8ff] px-3 py-1.5"
+            >
               <LogOut className="w-3 h-3" />
               <span>Terminate Session</span>
             </button>
@@ -118,19 +138,19 @@ async function DashboardContent({ searchParams }: DashboardPageProps) {
       </nav>
 
       <main className="max-w-7xl mx-auto px-6 py-12">
-        <ClientDashboard 
+        <ClientDashboard
           baseUrl={baseUrlDetails.activeUrl}
           baseUrlDetails={baseUrlDetails}
           initialTab={resolvedSearchParams.tab}
           userId={user.id}
           isAppConfigured={isAppConfigured}
-          installations={installations} 
-          appSlug={appSlug} 
-          repositories={repos} 
+          installations={installations}
+          appSlug={appSlug}
+          repositories={repos}
           shares={shares.map((share) => ({
             ...share,
             passwordProtected: Boolean(share.passwordHash),
-          }))} 
+          }))}
           analyticsData={analyticsByDate}
         />
       </main>

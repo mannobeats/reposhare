@@ -1,10 +1,10 @@
 "use server"
 
-import { prisma } from "@/lib/prisma"
+import bcrypt from "bcryptjs"
 import { revalidatePath } from "next/cache"
 import { auth, signOut } from "@/auth"
 import { normalizePublicUrl } from "@/lib/base-url"
-import bcrypt from "bcryptjs"
+import { prisma } from "@/lib/prisma"
 
 export type ActionResult = {
   ok: boolean
@@ -23,11 +23,15 @@ function failure(error: string): ActionResult {
 
 async function requireUser() {
   const session = await auth()
-  if (!session?.user?.email) return failure("Your session expired. Please sign in again.")
-  
-  const user = await prisma.user.findUnique({ where: { email: session.user.email } })
-  if (!user) return failure("Your account no longer exists. Please sign in again.")
-  
+  if (!session?.user?.email)
+    return failure("Your session expired. Please sign in again.")
+
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+  })
+  if (!user)
+    return failure("Your account no longer exists. Please sign in again.")
+
   return user as typeof user | ActionResult
 }
 
@@ -40,7 +44,9 @@ export type ShareOptionsInput = {
   allowZipDownload?: boolean
 }
 
-export async function createShareLink(options: ShareOptionsInput): Promise<ActionResult> {
+export async function createShareLink(
+  options: ShareOptionsInput,
+): Promise<ActionResult> {
   const user = await requireUser()
   if ("ok" in user) return user
 
@@ -52,8 +58,12 @@ export async function createShareLink(options: ShareOptionsInput): Promise<Actio
     return failure("Share passwords must be at least 4 characters long.")
   }
 
-  const expiresAt = options.expiresInDays ? new Date(Date.now() + options.expiresInDays * 24 * 60 * 60 * 1000) : null
-  const passwordHash = options.password?.trim() ? await bcrypt.hash(options.password.trim(), 10) : null
+  const expiresAt = options.expiresInDays
+    ? new Date(Date.now() + options.expiresInDays * 24 * 60 * 60 * 1000)
+    : null
+  const passwordHash = options.password?.trim()
+    ? await bcrypt.hash(options.password.trim(), 10)
+    : null
 
   try {
     const share = await prisma.share.create({
@@ -65,7 +75,7 @@ export async function createShareLink(options: ShareOptionsInput): Promise<Actio
         passwordHash,
         allowGitClone: options.allowGitClone ?? true,
         allowZipDownload: options.allowZipDownload ?? true,
-      }
+      },
     })
 
     revalidatePath("/dashboard")
@@ -84,14 +94,18 @@ export type ShareUpdateInput = {
   allowZipDownload?: boolean
 }
 
-export async function toggleShareActive(id: string, active: boolean): Promise<ActionResult> {
+export async function toggleShareActive(
+  id: string,
+  active: boolean,
+): Promise<ActionResult> {
   const user = await requireUser()
   if ("ok" in user) return user
-  
+
   // Verify the share belongs to this user
   const share = await prisma.share.findUnique({ where: { id } })
-  if (!share || share.userId !== user.id) return failure("You cannot modify that share.")
-  
+  if (!share || share.userId !== user.id)
+    return failure("You cannot modify that share.")
+
   try {
     await prisma.share.update({ where: { id }, data: { active } })
     revalidatePath("/dashboard")
@@ -104,11 +118,12 @@ export async function toggleShareActive(id: string, active: boolean): Promise<Ac
 export async function deleteShare(id: string): Promise<ActionResult> {
   const user = await requireUser()
   if ("ok" in user) return user
-  
+
   // Verify the share belongs to this user
   const share = await prisma.share.findUnique({ where: { id } })
-  if (!share || share.userId !== user.id) return failure("You cannot delete that share.")
-  
+  if (!share || share.userId !== user.id)
+    return failure("You cannot delete that share.")
+
   try {
     await prisma.share.delete({ where: { id } })
     revalidatePath("/dashboard")
@@ -118,12 +133,15 @@ export async function deleteShare(id: string): Promise<ActionResult> {
   }
 }
 
-export async function updateShareSettings(input: ShareUpdateInput): Promise<ActionResult> {
+export async function updateShareSettings(
+  input: ShareUpdateInput,
+): Promise<ActionResult> {
   const user = await requireUser()
   if ("ok" in user) return user
 
   const share = await prisma.share.findUnique({ where: { id: input.id } })
-  if (!share || share.userId !== user.id) return failure("You cannot modify that share.")
+  if (!share || share.userId !== user.id)
+    return failure("You cannot modify that share.")
 
   if (input.allowGitClone === false && input.allowZipDownload === false) {
     return failure("Enable at least one access method for the share.")
@@ -143,11 +161,15 @@ export async function updateShareSettings(input: ShareUpdateInput): Promise<Acti
     await prisma.share.update({
       where: { id: input.id },
       data: {
-        expiresAt: input.expiresInDays ? new Date(Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000) : null,
+        expiresAt: input.expiresInDays
+          ? new Date(Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000)
+          : null,
         allowGitClone: input.allowGitClone ?? share.allowGitClone,
         allowZipDownload: input.allowZipDownload ?? share.allowZipDownload,
-        ...(nextPasswordHash !== undefined ? { passwordHash: nextPasswordHash } : {}),
-      }
+        ...(nextPasswordHash !== undefined
+          ? { passwordHash: nextPasswordHash }
+          : {}),
+      },
     })
     revalidatePath("/dashboard")
     revalidatePath(`/share/${input.id}`, "layout")
@@ -183,14 +205,14 @@ export async function purgeGitHubToken(): Promise<ActionResult> {
         clientId: "",
         clientSecret: "",
         webhookSecret: "",
-        privateKey: ""
-      }
+        privateKey: "",
+      },
     })
-    
+
     await prisma.user.updateMany({
-      data: { installationId: null }
+      data: { installationId: null },
     })
-    
+
     revalidatePath("/dashboard")
     return success()
   } catch {
@@ -198,7 +220,9 @@ export async function purgeGitHubToken(): Promise<ActionResult> {
   }
 }
 
-export async function updatePublicUrlOverride(publicUrl: string): Promise<ActionResult> {
+export async function updatePublicUrlOverride(
+  publicUrl: string,
+): Promise<ActionResult> {
   const user = await requireUser()
   if ("ok" in user) return user
   if (user.role !== "ADMIN") return failure("Admin access is required.")
@@ -219,7 +243,7 @@ export async function updatePublicUrlOverride(publicUrl: string): Promise<Action
         clientSecret: "temp",
         webhookSecret: "temp",
         privateKey: "temp",
-      }
+      },
     })
 
     revalidatePath("/")
@@ -233,7 +257,7 @@ export async function updatePublicUrlOverride(publicUrl: string): Promise<Action
 export async function terminateAccount(): Promise<ActionResult> {
   const user = await requireUser()
   if ("ok" in user) return user
-  
+
   try {
     await prisma.share.deleteMany({ where: { userId: user.id } })
     await prisma.user.delete({ where: { id: user.id } })

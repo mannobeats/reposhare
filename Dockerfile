@@ -1,12 +1,13 @@
 FROM node:22-alpine AS deps
 RUN apk add --no-cache libc6-compat python3 make g++
 WORKDIR /app
+RUN corepack enable
 
-COPY package.json package-lock.json* ./
+COPY package.json pnpm-lock.yaml* ./
 COPY prisma ./prisma/
 COPY prisma.config.ts ./
-RUN npm ci
-RUN npx prisma generate
+RUN pnpm install --frozen-lockfile
+RUN pnpm exec prisma generate
 
 FROM node:22-alpine AS builder
 WORKDIR /app
@@ -17,7 +18,7 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
-RUN npm run build
+RUN pnpm run build
 
 FROM node:22-alpine AS runner
 RUN apk add --no-cache libc6-compat su-exec wget

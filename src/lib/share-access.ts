@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
 import { cookies } from "next/headers"
-import { NextRequest } from "next/server"
+import type { NextRequest } from "next/server"
 
 type ShareAccessResult = {
   ok: boolean
@@ -28,7 +28,11 @@ export function getShareRepoName(repoFullName: string) {
   return repoFullName.split("/")[1] || "repository"
 }
 
-export function buildShareClonePath(baseUrl: string, shareId: string, repoFullName: string) {
+export function buildShareClonePath(
+  baseUrl: string,
+  shareId: string,
+  repoFullName: string,
+) {
   const repoName = getShareRepoName(repoFullName)
   return `${baseUrl}/share/${shareId}/${repoName}.git`
 }
@@ -68,7 +72,9 @@ async function hasCookieAccess(shareId: string) {
   return verifyShareAccessToken(token, shareId)
 }
 
-export async function verifyShareBrowserAccess(share: ProtectedShare): Promise<ShareAccessResult> {
+export async function verifyShareBrowserAccess(
+  share: ProtectedShare,
+): Promise<ShareAccessResult> {
   if (!share.passwordHash) {
     return { ok: true }
   }
@@ -77,7 +83,10 @@ export async function verifyShareBrowserAccess(share: ProtectedShare): Promise<S
   return allowed ? { ok: true } : { ok: false, reason: "missing-password" }
 }
 
-export async function verifyShareRequestAccess(req: NextRequest, share: ProtectedShare): Promise<ShareAccessResult> {
+export async function verifyShareRequestAccess(
+  req: NextRequest,
+  share: ProtectedShare,
+): Promise<ShareAccessResult> {
   if (!share.passwordHash) {
     return { ok: true }
   }
@@ -100,18 +109,26 @@ export async function verifyShareRequestAccess(req: NextRequest, share: Protecte
   return { ok: true }
 }
 
-export async function unlockBrowserShareAccess(shareId: string, passwordHash: string, password: string) {
+export async function unlockBrowserShareAccess(
+  shareId: string,
+  passwordHash: string,
+  password: string,
+) {
   const matches = await bcrypt.compare(password, passwordHash)
   if (!matches) return false
 
   const cookieStore = await cookies()
-  cookieStore.set(getShareAccessCookieName(shareId), createShareAccessToken(shareId), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: SHARE_ACCESS_DURATION_SECONDS,
-    path: "/",
-  })
+  cookieStore.set(
+    getShareAccessCookieName(shareId),
+    createShareAccessToken(shareId),
+    {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: SHARE_ACCESS_DURATION_SECONDS,
+      path: "/",
+    },
+  )
 
   return true
 }

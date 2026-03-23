@@ -1,11 +1,13 @@
 "use server"
 
-import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
+import { prisma } from "@/lib/prisma"
 
 export async function setupPlatform(formData: FormData) {
   // Guard: do not allow re-initialization once an admin exists
-  const existingAdmin = await prisma.user.findFirst({ where: { role: "ADMIN" } })
+  const existingAdmin = await prisma.user.findFirst({
+    where: { role: "ADMIN" },
+  })
   if (existingAdmin) {
     throw new Error("Platform is already initialized. Cannot re-run setup.")
   }
@@ -33,7 +35,7 @@ export async function setupPlatform(formData: FormData) {
   await prisma.user.upsert({
     where: { email },
     update: { passwordHash, role: "ADMIN" },
-    create: { email, passwordHash, role: "ADMIN", name: "Administrator" }
+    create: { email, passwordHash, role: "ADMIN", name: "Administrator" },
   })
 
   // Start initializing SystemConfig block to hold target URLs and setup state natively
@@ -49,7 +51,7 @@ export async function setupPlatform(formData: FormData) {
       clientSecret: "temp",
       webhookSecret: "temp",
       privateKey: "temp",
-    }
+    },
   })
 
   return { success: true }

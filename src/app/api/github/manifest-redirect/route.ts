@@ -4,11 +4,22 @@ import { getCanonicalBaseUrl } from "@/lib/base-url"
 export async function GET() {
   let baseUrl = await getCanonicalBaseUrl()
   if (baseUrl.endsWith("/")) baseUrl = baseUrl.slice(0, -1)
-  
-  const isPublicUrl = baseUrl.startsWith("https://") && !baseUrl.includes("localhost") && !baseUrl.includes("127.0.0.1")
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const manifest: Record<string, any> = {
+  const isPublicUrl =
+    baseUrl.startsWith("https://") &&
+    !baseUrl.includes("localhost") &&
+    !baseUrl.includes("127.0.0.1")
+
+  const manifest: {
+    name: string
+    url: string
+    redirect_url: string
+    public: boolean
+    default_permissions: Record<string, string>
+    hook_attributes?: {
+      url: string
+    }
+  } = {
     name: "RepoShare",
     url: baseUrl,
     redirect_url: `${baseUrl}/api/github/setup`,
@@ -16,18 +27,18 @@ export async function GET() {
     default_permissions: {
       contents: "read",
       metadata: "read",
-      emails: "read"
-    }
+      emails: "read",
+    },
   }
 
   // GitHub strictly blocks localhost hook_attributes and throws "Hook is invalid"
   if (isPublicUrl) {
     manifest.hook_attributes = {
-      url: `${baseUrl}/api/github/webhook`
+      url: `${baseUrl}/api/github/webhook`,
     }
   }
 
-  // We explicitly do NOT specify `default_events`. 
+  // We explicitly do NOT specify `default_events`.
   // Selecting "installation" without administration permission breaks the GitHub Manifest flow natively.
   // We can let the user optionally click those later, or they are auto-applied by github intelligently if hooks are present.
 
@@ -52,6 +63,6 @@ export async function GET() {
     </body>
     </html>
   `
-  
+
   return new NextResponse(html, { headers: { "Content-Type": "text/html" } })
 }
