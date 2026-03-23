@@ -45,10 +45,28 @@ require_compose() {
   exit 1
 }
 
+prompt_value() {
+  local __result_var="$1"
+  local prompt_text="$2"
+  local default_value="${3:-}"
+  local response=""
+
+  if [ -r /dev/tty ]; then
+    read -r -p "$prompt_text" response </dev/tty || true
+  else
+    read -r -p "$prompt_text" response || true
+  fi
+
+  if [ -z "$response" ]; then
+    response="$default_value"
+  fi
+
+  printf -v "$__result_var" '%s' "$response"
+}
+
 prompt_install_dir() {
   local prompt_label="${1:-Installation directory}"
-  read -rp "$(echo -e "${CYAN}▸${NC} ${prompt_label} [${DIM}${DEFAULT_DIR}${NC}]: ")" INSTALL_DIR
-  INSTALL_DIR="${INSTALL_DIR:-$DEFAULT_DIR}"
+  prompt_value INSTALL_DIR "$(echo -e "${CYAN}▸${NC} ${prompt_label} [${DIM}${DEFAULT_DIR}${NC}]: ")" "$DEFAULT_DIR"
 }
 
 detect_local_ip() {
@@ -185,14 +203,13 @@ command_install() {
   prompt_install_dir
 
   local port
-  read -rp "$(echo -e "${CYAN}▸${NC} RepoShare port [${DIM}${DEFAULT_PORT}${NC}]: ")" port
-  port="${port:-$DEFAULT_PORT}"
+  prompt_value port "$(echo -e "${CYAN}▸${NC} RepoShare port [${DIM}${DEFAULT_PORT}${NC}]: ")" "$DEFAULT_PORT"
 
   echo ""
   info "If you're putting RepoShare behind your own reverse proxy on this same server,"
   info "the installer can bind the app to localhost only."
   local reverse_proxy_reply
-  read -rp "$(echo -e "${CYAN}▸${NC} Bind only to localhost for a reverse proxy? (y/N): ")" reverse_proxy_reply
+  prompt_value reverse_proxy_reply "$(echo -e "${CYAN}▸${NC} Bind only to localhost for a reverse proxy? (y/N): ")" ""
 
   local bind_address="0.0.0.0"
   local reverse_proxy_mode="false"
@@ -210,7 +227,7 @@ command_install() {
   info "Examples: share.example.com, https://share.example.com, http://192.168.1.50:${port}"
   info "Leave blank to auto-detect a local URL."
   local public_url_input
-  read -rp "$(echo -e "${CYAN}▸${NC} Public URL [${DIM}${default_public_url}${NC}]: ")" public_url_input
+  prompt_value public_url_input "$(echo -e "${CYAN}▸${NC} Public URL [${DIM}${default_public_url}${NC}]: ")" "$default_public_url"
 
   local public_url
   public_url="$(normalize_url "${public_url_input:-}" "$reverse_proxy_mode")"
@@ -222,7 +239,7 @@ command_install() {
   if [ -d "$INSTALL_DIR" ] && [ -f "$INSTALL_DIR/docker-compose.yaml" ]; then
     warn "Existing RepoShare installation detected at $INSTALL_DIR"
     local replace_reply
-    read -rp "$(echo -e "${CYAN}▸${NC} Replace install files and keep existing data/config? (Y/n): ")" replace_reply
+    prompt_value replace_reply "$(echo -e "${CYAN}▸${NC} Replace install files and keep existing data/config? (Y/n): ")" "Y"
     if [[ "$replace_reply" =~ ^[Nn]$ ]]; then
       info "Aborting. Existing installation left untouched."
       exit 0
@@ -312,7 +329,7 @@ command_restore() {
 
   local backup_path="${2:-}"
   if [ -z "$backup_path" ]; then
-    read -rp "$(echo -e "${CYAN}▸${NC} Backup archive path: ")" backup_path
+    prompt_value backup_path "$(echo -e "${CYAN}▸${NC} Backup archive path: ")" ""
   fi
 
   if [ ! -f "$backup_path" ]; then
@@ -322,7 +339,7 @@ command_restore() {
 
   warn "This will replace the current install files, .env, and ./data contents."
   local confirm_restore
-  read -rp "$(echo -e "${CYAN}▸${NC} Continue with restore? (y/N): ")" confirm_restore
+  prompt_value confirm_restore "$(echo -e "${CYAN}▸${NC} Continue with restore? (y/N): ")" ""
   if [[ ! "$confirm_restore" =~ ^[Yy]$ ]]; then
     info "Restore cancelled."
     exit 0

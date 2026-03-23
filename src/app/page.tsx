@@ -2,10 +2,15 @@ import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { auth, signIn } from "@/auth"
 import { Terminal, Shield } from "lucide-react"
+import { AuthError } from "next-auth"
 
 export const dynamic = "force-dynamic"
 
-export default async function LandingPage() {
+export default async function LandingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>
+}) {
   const config = await prisma.systemConfig.findUnique({ where: { id: "singleton" } })
   if (!config?.isSetupComplete) {
     redirect("/setup")
@@ -15,6 +20,9 @@ export default async function LandingPage() {
   if (session?.user) {
     redirect("/dashboard")
   }
+
+  const params = await searchParams
+  const loginError = params.error === "credentials" ? "Invalid email or password." : null
 
   return (
     <div className="min-h-screen relative flex flex-col items-center justify-center p-4 screen-scanline">
@@ -34,7 +42,15 @@ export default async function LandingPage() {
         <div className="w-full max-w-sm space-y-8">
           <form action={async (formData) => {
             "use server"
-            await signIn("credentials", formData)
+            try {
+              await signIn("credentials", formData)
+            } catch (error) {
+              if (error instanceof AuthError && error.type === "CredentialsSignin") {
+                redirect("/?error=credentials")
+              }
+
+              throw error
+            }
           }} className="space-y-6 p-8 border border-primary/40 bg-background shadow-[0_0_30px_rgba(94,184,255,0.05)] relative">
             <div className="absolute top-0 left-0 w-2 h-full bg-primary" />
             
@@ -43,6 +59,12 @@ export default async function LandingPage() {
             </h2>
             
             <div className="space-y-4">
+              {loginError ? (
+                <div className="border border-red-500/60 bg-red-500/10 px-4 py-3 text-[10px] uppercase tracking-widest text-red-400">
+                  &gt; {loginError}
+                </div>
+              ) : null}
+
               <div>
                 <label className="text-[10px] uppercase text-primary/60 tracking-widest block mb-2">Email:</label>
                 <input 
