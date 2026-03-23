@@ -150,7 +150,7 @@ export async function updateShareSettings(input: ShareUpdateInput): Promise<Acti
       }
     })
     revalidatePath("/dashboard")
-    revalidatePath(`/share/${input.id}`)
+    revalidatePath(`/share/${input.id}`, "layout")
     return success()
   } catch {
     return failure("Failed to update the share settings.")

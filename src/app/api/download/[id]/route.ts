@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getInstallationToken } from "@/lib/github"
 import { verifyShareRequestAccess } from "@/lib/share-access"
+import JSZip from "jszip"
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const id = (await params).id.replace(/\.git$/, "")
@@ -51,11 +52,43 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "Failed to assemble ZIP bundle from source." }, { status: 500 })
   }
 
-  // Stream the response back so massive repos don't consume memory
-  return new NextResponse(response.body, {
+  const repoName = share.repoFullName.split("/")[1] || "repository"
+
+  // GitHub's zipball wraps files in a folder named "owner-repo-commitsha".
+  // Repackage the zip so the root folder matches the actual repository name,
+  // giving the same experience as cloning or downloading from a public repo.
+  const originalBuffer = Buffer.from(await response.arrayBuffer())
+  const original = await JSZip.loadAsync(originalBuffer)
+  const repackaged = new JSZip()
+
+  // Detect the GitHub-generated root folder prefix (e.g. "owner-repo-sha/")
+  const firstEntry = Object.keys(original.files)[0] || ""
+  const githubPrefix = firstEntry.includes("/") ? firstEntry.split("/")[0] + "/" : ""
+
+  for (const [path, entry] of Object.entries(original.files)) {
+    // Replace the GitHub prefix with the clean repo name
+    const newPath = githubPrefix
+      ? path.replace(githubPrefix, repoName + "/")
+      : repoName + "/" + path
+
+    if (entry.dir) {
+      repackaged.folder(newPath)
+    } else {
+      const content = await entry.async("uint8array")
+      repackaged.file(newPath, content)
+    }
+  }
+
+  const zipBuffer = await repackaged.generateAsync({
+    type: "uint8array",
+    compression: "DEFLATE",
+    compressionOptions: { level: 6 },
+  })
+
+  return new NextResponse(Buffer.from(zipBuffer), {
     headers: {
       "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="${share.repoFullName.split("/")[1]}-shared.zip"`,
+      "Content-Disposition": `attachment; filename="${repoName}.zip"`,
     }
   })
 }

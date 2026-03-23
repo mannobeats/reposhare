@@ -68,8 +68,8 @@ function getRepoName(repoFullName: string) {
   return repoFullName.split("/")[1] || repoFullName
 }
 
-function getSharePageUrl(baseUrl: string, shareId: string) {
-  return `${baseUrl}/share/${shareId}`
+function getSharePageUrl(baseUrl: string, shareId: string, repoFullName: string) {
+  return `${baseUrl}/share/${shareId}/${getRepoName(repoFullName)}`
 }
 
 function getShareCloneUrl(baseUrl: string, shareId: string, repoFullName: string) {
@@ -274,8 +274,8 @@ export default function ClientDashboard({ baseUrl, baseUrlDetails, initialTab, u
     }
   }
 
-  const handleCopyLink = async (id: string) => {
-    const link = getSharePageUrl(baseUrl, id)
+  const handleCopyLink = async (id: string, repoFullName: string) => {
+    const link = getSharePageUrl(baseUrl, id, repoFullName)
     try {
       await copyText(link)
       toast.success("Data-stream copied to memory buffer")
@@ -627,7 +627,7 @@ export default function ClientDashboard({ baseUrl, baseUrlDetails, initialTab, u
                       </div>
 
                       <div className="flex items-center flex-wrap gap-3 pl-4">
-                        <Button variant="outline" size="sm" onClick={() => handleCopyLink(share.id)} className="h-9 rounded-none border-[#5eb8ff]/50 text-[#5eb8ff] bg-transparent hover:bg-[#5eb8ff] hover:text-[#000508] font-bold uppercase text-[10px] tracking-widest">
+                        <Button variant="outline" size="sm" onClick={() => handleCopyLink(share.id, share.repoFullName)} className="h-9 rounded-none border-[#5eb8ff]/50 text-[#5eb8ff] bg-transparent hover:bg-[#5eb8ff] hover:text-[#000508] font-bold uppercase text-[10px] tracking-widest">
                           <Copy className="w-3 h-3 mr-2" /> BUFFER URI
                         </Button>
                         <Button variant="outline" size="sm" onClick={() => openEditComposer(share)} className="h-9 rounded-none border-[#5eb8ff]/50 text-[#5eb8ff] bg-transparent hover:bg-[#5eb8ff] hover:text-[#000508] font-bold uppercase text-[10px] tracking-widest">
