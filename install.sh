@@ -500,13 +500,30 @@ command_install() {
   echo ""
   info "Enter the public URL or domain RepoShare should use for share links and GitHub callbacks."
   info "Examples: share.example.com, https://share.example.com, http://192.168.1.50:${port}"
-  info "Leave blank to auto-detect a local URL."
+  if [ "$reverse_proxy_mode" = "true" ]; then
+    info "Because reverse proxy mode is enabled, this must be the external URL served by your proxy."
+    info "Do not use 127.0.0.1 or the server's LAN IP here unless clients will really browse through that address."
+  else
+    info "Leave blank to auto-detect a local URL."
+  fi
   local public_url_input
-  prompt_value public_url_input "$(echo -e "${CYAN}▸${NC} Public URL [${DIM}${default_public_url}${NC}]: ")" "$default_public_url"
+  if [ "$reverse_proxy_mode" = "true" ]; then
+    prompt_value public_url_input "$(echo -e "${CYAN}▸${NC} Public URL or domain served by your proxy: ")" ""
+  else
+    prompt_value public_url_input "$(echo -e "${CYAN}▸${NC} Public URL [${DIM}${default_public_url}${NC}]: ")" "$default_public_url"
+  fi
 
   local public_url
   public_url="$(normalize_url "${public_url_input:-}" "$reverse_proxy_mode")"
-  public_url="${public_url:-$default_public_url}"
+  if [ "$reverse_proxy_mode" = "true" ]; then
+    if [ -z "$public_url" ]; then
+      warn "Reverse proxy mode requires an explicit external URL or domain."
+      echo -e "${DIM}Example: https://share.example.com${NC}"
+      exit 1
+    fi
+  else
+    public_url="${public_url:-$default_public_url}"
+  fi
 
   local app_secret
   app_secret="$(openssl rand -base64 48 | tr -d '\n')"
@@ -553,7 +570,9 @@ command_install() {
   echo ""
 
   if [ "$reverse_proxy_mode" = "true" ]; then
-    echo -e "${DIM}Reverse proxy reminder:${NC} Proxy to http://127.0.0.1:${port} and forward Host + X-Forwarded-* headers."
+    echo -e "${DIM}Reverse proxy reminder:${NC} RepoShare is only listening on 127.0.0.1:${port}."
+    echo -e "${DIM}It will not be reachable at ${public_url} until your proxy forwards traffic to http://127.0.0.1:${port}.${NC}"
+    echo -e "${DIM}Forward Host + X-Forwarded-* headers from the proxy.${NC}"
   fi
 }
 
