@@ -16,6 +16,7 @@ warn()    { echo -e "${RED}▸${NC} $1"; }
 header()  { echo -e "\n${BOLD}${BLUE}═══════════════════════════════════════${NC}"; echo -e "${BOLD}${BLUE}  $1${NC}"; echo -e "${BOLD}${BLUE}═══════════════════════════════════════${NC}\n"; }
 
 DEFAULT_DIR="${REPOSHARE_DIR:-$HOME/reposhare}"
+DOCKER_BIN="sudo docker"
 COMPOSE_CMD="sudo docker compose"
 INSTALL_DIR=""
 
@@ -103,11 +104,11 @@ prompt_value remove_data "$(echo -e "${CYAN}▸${NC} Also delete all RepoShare d
 
 if [[ "$remove_data" =~ ^[Yy]$ ]]; then
   info "Removing ${INSTALL_DIR}..."
-  rm -rf "$INSTALL_DIR"
+  sudo rm -rf "$INSTALL_DIR"
   success "RepoShare and all stored data were removed."
 else
   info "Removing install files and leaving data behind..."
-  rm -f "$INSTALL_DIR/docker-compose.yaml"
+  sudo rm -f "$INSTALL_DIR/docker-compose.yaml"
   success "RepoShare was uninstalled."
   echo -e "${DIM}Data retained at:${NC} ${INSTALL_DIR}/data"
   echo -e "${DIM}Backups retained at:${NC} ${INSTALL_DIR}/backups"
