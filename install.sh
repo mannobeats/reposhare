@@ -15,6 +15,21 @@ success() { echo -e "${GREEN}✓${NC} $1"; }
 warn()    { echo -e "${RED}▸${NC} $1"; }
 header()  { echo -e "\n${BOLD}${BLUE}═══════════════════════════════════════${NC}"; echo -e "${BOLD}${BLUE}  $1${NC}"; echo -e "${BOLD}${BLUE}═══════════════════════════════════════${NC}\n"; }
 
+print_banner() {
+  echo ""
+  echo -e "${BOLD}${BLUE}"
+  cat << 'EOF'
+   ____                  _____ __                  
+   / __ \___  ____  ____ / ___// /_  ____ _________ 
+  / /_/ / _ \/ __ \/ __ \\__ \/ __ \/ __ `/ ___/ _ \
+ / _, _/  __/ /_/ / /_/ /__/ / / / / /_/ / /  /  __/
+/_/ |_|\___/ .___/\____/____/_/ /_/\__,_/_/   \___/ 
+          /_/
+EOF
+  echo -e "${NC}  ${DIM}Self-hosted repository sharing${NC}"
+  echo ""
+}
+
 COMMAND="${1:-install}"
 DEFAULT_DIR="${REPOSHARE_DIR:-$HOME/reposhare}"
 DEFAULT_IMAGE="${REPOSHARE_IMAGE:-ghcr.io/mannobeats/reposhare:latest}"
@@ -55,6 +70,158 @@ require_compose() {
 
   warn "Docker Compose plugin is required."
   exit 1
+}
+
+_install_docker_apt() {
+  info "Installing Docker via apt (official repository)..."
+  sudo apt-get update -qq
+  sudo apt-get install -y ca-certificates curl gnupg
+  sudo install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+    | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  sudo chmod a+r /etc/apt/keyrings/docker.gpg
+  echo \
+    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+    https://download.docker.com/linux/ubuntu \
+    $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+    | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+  sudo apt-get update -qq
+  sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  sudo systemctl enable --now docker
+}
+
+_install_docker_dnf() {
+  info "Installing Docker via dnf (official repository)..."
+  sudo dnf -y install dnf-plugins-core
+  sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+  sudo dnf -y install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  sudo systemctl enable --now docker
+}
+
+_install_docker_macos() {
+  echo ""
+  echo -e "  ${BOLD}1)${NC} Install Docker Desktop via Homebrew ${DIM}(recommended)${NC}"
+  echo -e "  ${BOLD}2)${NC} Open Docker Desktop download page"
+  echo -e "  ${BOLD}3)${NC} Cancel"
+  echo ""
+  local choice
+  prompt_value choice "$(echo -e "${CYAN}▸${NC} Select an option [1]: ")" "1"
+  echo ""
+  case "$choice" in
+    2)
+      info "Opening Docker Desktop download page..."
+      open "https://www.docker.com/products/docker-desktop/" 2>/dev/null || true
+      echo -e "  ${DIM}Visit: https://www.docker.com/products/docker-desktop/${NC}"
+      echo -e "  ${DIM}Re-run this script after installation.${NC}"
+      exit 0
+      ;;
+    3)
+      info "Cancelled."
+      exit 0
+      ;;
+    *)
+      if ! command -v brew >/dev/null 2>&1; then
+        warn "Homebrew is not installed. Install it from https://brew.sh, then re-run."
+        exit 1
+      fi
+      info "Installing Docker Desktop via Homebrew..."
+      brew install --cask docker
+      echo ""
+      success "Docker Desktop installed."
+      info "Launch Docker Desktop from your Applications folder to start the daemon, then re-run this script."
+      exit 0
+      ;;
+  esac
+}
+
+_install_docker_linux() {
+  echo ""
+  local distro_id="" distro_pretty=""
+  if [ -f /etc/os-release ]; then
+    # shellcheck source=/dev/null
+    . /etc/os-release
+    distro_id="${ID:-}"
+    distro_pretty="${PRETTY_NAME:-Linux}"
+  fi
+  info "Distribution: ${distro_pretty:-Unknown}"
+  echo ""
+
+  local opt2_label=""
+  case "$distro_id" in
+    ubuntu|debian|linuxmint|pop)         opt2_label="Install via apt (official Docker repository)" ;;
+    fedora|rhel|centos|rocky|almalinux)  opt2_label="Install via dnf (official Docker repository)" ;;
+    arch|manjaro|endeavouros)            opt2_label="Install via pacman" ;;
+  esac
+
+  echo -e "  ${BOLD}1)${NC} Install via Docker's convenience script ${DIM}(get.docker.com — recommended)${NC}"
+  [ -n "$opt2_label" ] && echo -e "  ${BOLD}2)${NC} ${opt2_label}"
+  echo -e "  ${BOLD}3)${NC} Open Docker installation docs"
+  echo -e "  ${BOLD}4)${NC} Cancel"
+  echo ""
+  local choice
+  prompt_value choice "$(echo -e "${CYAN}▸${NC} Select an option [1]: ")" "1"
+  echo ""
+  case "$choice" in
+    2)
+      case "$distro_id" in
+        ubuntu|debian|linuxmint|pop)        _install_docker_apt ;;
+        fedora|rhel|centos|rocky|almalinux) _install_docker_dnf ;;
+        arch|manjaro|endeavouros)
+          sudo pacman -Sy --noconfirm docker
+          sudo systemctl enable --now docker
+          ;;
+        *)
+          warn "No distribution-specific installer for '${distro_id}'. Use option 1 instead."
+          exit 1
+          ;;
+      esac
+      ;;
+    3)
+      info "Opening Docker documentation..."
+      xdg-open "https://docs.docker.com/engine/install/" 2>/dev/null || true
+      echo -e "  ${DIM}Visit: https://docs.docker.com/engine/install/${NC}"
+      echo -e "  ${DIM}Re-run this script after installation.${NC}"
+      exit 0
+      ;;
+    4)
+      info "Cancelled."
+      exit 0
+      ;;
+    *)
+      if ! command -v curl >/dev/null 2>&1; then
+        warn "curl is required to download the Docker install script."
+        exit 1
+      fi
+      info "Running Docker convenience script from get.docker.com..."
+      curl -fsSL https://get.docker.com | sh
+      ;;
+  esac
+}
+
+install_docker() {
+  warn "Docker is not installed on this system."
+  echo ""
+  echo -e "  ${DIM}RepoShare requires Docker to run. Would you like to install it now?${NC}"
+  echo ""
+  local install_reply
+  prompt_value install_reply "$(echo -e "${CYAN}▸${NC} Install Docker automatically? (Y/n): ")" "Y"
+  if [[ "$install_reply" =~ ^[Nn]$ ]]; then
+    echo ""
+    echo -e "  ${DIM}Install Docker manually: https://docs.docker.com/get-docker/${NC}"
+    exit 1
+  fi
+  echo ""
+  local os_type
+  os_type="$(uname -s)"
+  case "$os_type" in
+    Darwin) _install_docker_macos ;;
+    Linux)  _install_docker_linux ;;
+    *)
+      warn "Unsupported OS: $os_type"
+      echo -e "  ${DIM}Install Docker manually: https://docs.docker.com/get-docker/${NC}"
+      exit 1
+      ;;
+  esac
 }
 
 prompt_value() {
@@ -131,6 +298,7 @@ services:
   app:
     image: ${REPOSHARE_IMAGE:-ghcr.io/mannobeats/reposhare:latest}
     container_name: reposhare
+    init: true
     restart: unless-stopped
     ports:
       - "${BIND_ADDRESS:-0.0.0.0}:${PORT:-3417}:3417"
@@ -143,7 +311,7 @@ services:
     volumes:
       - ./data:/data
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3417/api/health >/dev/null 2>&1 || exit 1"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3417/api/health').then((res)=>res.ok?res.json().then((body)=>body.ok?process.exit(0):process.exit(1)):process.exit(1)).catch(()=>process.exit(1))"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -177,6 +345,88 @@ run_compose() {
   )
 }
 
+wait_for_healthy() {
+  local target_dir="$1"
+  local service_name="${2:-app}"
+  local attempts="${3:-30}"
+  local delay_seconds="${4:-2}"
+  local container_id=""
+  local status=""
+
+  container_id="$(run_compose "$target_dir" ps -q "$service_name" | tail -n 1)"
+  if [ -z "$container_id" ]; then
+    warn "Could not determine the running container for ${service_name}."
+    return 1
+  fi
+
+  info "Waiting for RepoShare to become healthy..."
+  for _ in $(seq 1 "$attempts"); do
+    status="$($DOCKER_BIN inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id" 2>/dev/null || true)"
+    case "$status" in
+      healthy|running)
+        success "RepoShare is healthy."
+        return 0
+        ;;
+      unhealthy|exited|dead)
+        warn "RepoShare reported status: ${status}"
+        run_compose "$target_dir" logs --tail=120 || true
+        return 1
+        ;;
+    esac
+    sleep "$delay_seconds"
+  done
+
+  warn "RepoShare did not become healthy in time."
+  run_compose "$target_dir" logs --tail=120 || true
+  return 1
+}
+
+install_openssl() {
+  local os_type
+  os_type="$(uname -s)"
+
+  case "$os_type" in
+    Darwin)
+      if ! command -v brew >/dev/null 2>&1; then
+        warn "openssl is required and Homebrew is not installed."
+        echo -e "${DIM}Install Homebrew from https://brew.sh and re-run.${NC}"
+        return 1
+      fi
+      info "Installing openssl via Homebrew..."
+      brew install openssl
+      ;;
+    Linux)
+      if [ -f /etc/os-release ]; then
+        # shellcheck source=/dev/null
+        . /etc/os-release
+      fi
+      case "${ID:-}" in
+        ubuntu|debian|linuxmint|pop)
+          info "Installing openssl via apt..."
+          sudo apt-get update -qq
+          sudo apt-get install -y openssl
+          ;;
+        fedora|rhel|centos|rocky|almalinux)
+          info "Installing openssl via dnf..."
+          sudo dnf -y install openssl
+          ;;
+        arch|manjaro|endeavouros)
+          info "Installing openssl via pacman..."
+          sudo pacman -Sy --noconfirm openssl
+          ;;
+        *)
+          warn "openssl is required, but this Linux distribution is not handled automatically."
+          return 1
+          ;;
+      esac
+      ;;
+    *)
+      warn "openssl is required, but automatic installation is not supported on this OS."
+      return 1
+      ;;
+  esac
+}
+
 ensure_install_files() {
   local target_dir="$1"
   mkdir -p "$target_dir" "$target_dir/data" "$target_dir/backups"
@@ -191,13 +441,31 @@ command_install() {
   info "Checking system requirements..."
   echo ""
 
-  check_command "docker" || missing_deps+=("docker")
+  # Check Docker separately — offer to install if missing
+  if ! check_command "docker"; then
+    echo ""
+    install_docker
+    echo ""
+    check_command "docker" || { warn "Docker is still unavailable. Please install it manually and re-run."; exit 1; }
+  fi
+
   check_command "sudo" || missing_deps+=("sudo")
-  check_command "openssl" || missing_deps+=("openssl")
+  if ! check_command "openssl"; then
+    echo ""
+    local install_openssl_reply
+    prompt_value install_openssl_reply "$(echo -e "${CYAN}▸${NC} openssl is required. Install it now? (Y/n): ")" "Y"
+    if [[ ! "$install_openssl_reply" =~ ^[Nn]$ ]]; then
+      install_openssl || { warn "openssl installation failed."; exit 1; }
+    fi
+    check_command "openssl" || missing_deps+=("openssl")
+  fi
   echo ""
 
   if [ ${#missing_deps[@]} -gt 0 ]; then
     warn "Missing dependencies: ${missing_deps[*]}"
+    if printf '%s\n' "${missing_deps[@]}" | grep -qx "sudo"; then
+      echo -e "${DIM}sudo is required for Docker administration and cannot be bootstrapped safely from this installer.${NC}"
+    fi
     echo -e "${DIM}Please install the missing tools and re-run this script.${NC}"
     exit 1
   fi
@@ -268,6 +536,7 @@ command_install() {
 
   info "Starting RepoShare..."
   run_compose "$INSTALL_DIR" up -d
+  wait_for_healthy "$INSTALL_DIR"
 
   success "RepoShare is installed and starting up."
   echo ""
@@ -303,6 +572,7 @@ command_update() {
   run_compose "$INSTALL_DIR" pull
   info "Restarting RepoShare..."
   run_compose "$INSTALL_DIR" up -d
+  wait_for_healthy "$INSTALL_DIR"
   success "RepoShare has been updated."
 }
 
@@ -352,10 +622,16 @@ command_restore() {
     exit 0
   fi
 
+  info "Stopping RepoShare..."
+  run_compose "$INSTALL_DIR" down || true
+
   mkdir -p "$INSTALL_DIR"
+  rm -rf "$INSTALL_DIR/data"
+  rm -f "$INSTALL_DIR/.env" "$INSTALL_DIR/docker-compose.yaml"
   tar -xzf "$backup_path" -C "$INSTALL_DIR"
   info "Restarting RepoShare..."
   run_compose "$INSTALL_DIR" up -d
+  wait_for_healthy "$INSTALL_DIR"
   success "Restore completed."
 }
 
@@ -377,6 +653,8 @@ command_status() {
 
   run_compose "$INSTALL_DIR" ps
 }
+
+print_banner
 
 case "$COMMAND" in
   install)

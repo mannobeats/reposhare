@@ -4,7 +4,8 @@
   "private": true,
   "packageManager": "pnpm@10.22.0",
   "scripts": {
-    "dev": "next dev -p ${PORT:-3417}",
+    "postinstall": "prisma generate",
+    "dev": "next dev --webpack -p ${PORT:-3417}",
     "build": "next build",
     "start": "next start -p ${PORT:-3417}",
     "lint": "biome check .",

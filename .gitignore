@@ -52,3 +52,5 @@ next-env.d.ts
 .cursor/rules/openmemory.mdc
 CLAUDE.md
 AGENTS.md
+.windsurf/rules/openmemory.md
+openmemory.md
